@@ -1,0 +1,41 @@
+{{layout 'base'}}
+
+<script @server>
+var users = [
+    { id: 1, name: "John Doe", email: "john@example.com", role: "admin" },
+    { id: 2, name: "Jane Smith", email: "jane@example.com", role: "user" },
+    { id: 3, name: "Bob Johnson", email: "bob@example.com", role: "user" }
+];
+
+res.render({
+    Title: "Users",
+    users: users,
+    totalUsers: users.length
+});
+</script>
+
+<h1>User Directory</h1>
+<p>Total users: {{.totalUsers}}</p>
+
+<div class="admin-panel">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background-color: #f8f9fa;">
+                <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Email</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Role</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .users}}
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.id}}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.name}}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.email}}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.role}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>

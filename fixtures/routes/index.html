@@ -1,0 +1,51 @@
+{{layout 'base'}}
+
+<script @server>
+res.render({
+    Title: "Home",
+    posts: [
+        {
+            id: 1,
+            title: "Welcome to our blog",
+            content: "This is the first post on our test blog.",
+            date: "2024-01-15",
+            author: "Admin"
+        },
+        {
+            id: 2,
+            title: "Getting started with Redi",
+            content: "Learn how to use the Redi frontend server.",
+            date: "2024-01-20",
+            author: "Developer"
+        }
+    ]
+});
+</script>
+
+<h1>Welcome to Test Blog</h1>
+<p>This is a test blog built with Redi frontend server.</p>
+
+<section class="blog-posts">
+    <h2>Recent Posts</h2>
+    {{range .posts}}
+    <div class="blog-post">
+        <h3><a href="/blog/{{.id}}">{{.title}}</a></h3>
+        <div class="blog-meta">
+            By {{.author}} on {{.date}}
+        </div>
+        <p>{{.content}}</p>
+    </div>
+    {{end}}
+</section>
+
+<section style="margin-top: 40px;">
+    <h2>Features</h2>
+    <ul>
+        <li>Static file serving from public directory</li>
+        <li>Markdown to HTML conversion</li>
+        <li>Server-side JavaScript execution</li>
+        <li>Template layouts with nesting</li>
+        <li>Dynamic routing with parameters</li>
+        <li>REST API endpoints</li>
+    </ul>
+</section>

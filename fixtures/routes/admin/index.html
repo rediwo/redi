@@ -1,0 +1,71 @@
+{{layout 'admin'}}
+
+<script @server>
+res.render({
+    Title: "Dashboard",
+    stats: {
+        totalPosts: 15,
+        totalUsers: 3,
+        totalViews: 1250,
+        totalComments: 45
+    },
+    recentActivity: [
+        { action: "New post created", time: "2 hours ago", user: "Admin" },
+        { action: "User registered", time: "4 hours ago", user: "newuser@example.com" },
+        { action: "Post edited", time: "1 day ago", user: "Editor" }
+    ]
+});
+</script>
+
+<h1>Admin Dashboard</h1>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+    <div class="admin-panel" style="text-align: center;">
+        <h3>Total Posts</h3>
+        <div style="font-size: 2em; color: #007bff;">{{.stats.totalPosts}}</div>
+    </div>
+    <div class="admin-panel" style="text-align: center;">
+        <h3>Total Users</h3>
+        <div style="font-size: 2em; color: #28a745;">{{.stats.totalUsers}}</div>
+    </div>
+    <div class="admin-panel" style="text-align: center;">
+        <h3>Total Views</h3>
+        <div style="font-size: 2em; color: #ffc107;">{{.stats.totalViews}}</div>
+    </div>
+    <div class="admin-panel" style="text-align: center;">
+        <h3>Comments</h3>
+        <div style="font-size: 2em; color: #dc3545;">{{.stats.totalComments}}</div>
+    </div>
+</div>
+
+<div class="admin-panel">
+    <h2>Recent Activity</h2>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background-color: #f8f9fa;">
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Action</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">User</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .recentActivity}}
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.action}}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.user}}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">{{.time}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="admin-panel">
+    <h2>Quick Actions</h2>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="/admin/post_edit" class="btn">Create New Post</a>
+        <a href="/admin/user_edit" class="btn">Manage Users</a>
+        <a href="/admin/role_management" class="btn">Manage Roles</a>
+        <a href="/api/stats" class="btn" style="background-color: #6c757d;">View API Stats</a>
+    </div>
+</div>

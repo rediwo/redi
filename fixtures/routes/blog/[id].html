@@ -1,0 +1,74 @@
+{{layout 'base'}}
+
+<script @server>
+var posts = {
+    "1": {
+        id: 1,
+        title: "Welcome to our blog",
+        content: "This is the first post on our test blog. It demonstrates how dynamic routing works with the [id] parameter.",
+        date: "2024-01-15",
+        author: "Admin",
+        tags: ["welcome", "introduction"]
+    },
+    "2": {
+        id: 2,
+        title: "Getting started with Redi",
+        content: "Learn how to use the Redi frontend server. This post covers the basic features and how to set up your own blog.",
+        date: "2024-01-20",
+        author: "Developer",
+        tags: ["tutorial", "redi", "setup"]
+    },
+    "123": {
+        id: 123,
+        title: "Dynamic Route Example",
+        content: "This demonstrates the dynamic routing feature where [id] in the filename becomes a parameter.",
+        date: "2024-01-25",
+        author: "System",
+        tags: ["example", "routing"]
+    }
+};
+
+var postId = req.params.id;
+var post = posts[postId];
+
+if (!post) {
+    res.status(404);
+    res.render({
+        Title: "Post Not Found",
+        error: "Post not found"
+    });
+} else {
+    res.render({
+        Title: post.title,
+        post: post
+    });
+}
+</script>
+
+{{if .error}}
+<div class="blog-post">
+    <h1>404 - Post Not Found</h1>
+    <p>The requested blog post could not be found.</p>
+    <p><a href="/blog">← Back to Blog</a></p>
+</div>
+{{else}}
+<article class="blog-post">
+    <h1>{{.post.title}}</h1>
+    <div class="blog-meta">
+        By {{.post.author}} on {{.post.date}}
+    </div>
+    <div class="blog-content">
+        <p>{{.post.content}}</p>
+    </div>
+    <div class="blog-tags" style="margin-top: 20px;">
+        <strong>Tags:</strong>
+        {{range .post.tags}}
+        <span style="background: #e9ecef; padding: 2px 8px; margin: 2px; border-radius: 4px;">{{.}}</span>
+        {{end}}
+    </div>
+</article>
+
+<div style="margin-top: 30px;">
+    <a href="/" class="btn">← Back to Home</a>
+</div>
+{{end}}
