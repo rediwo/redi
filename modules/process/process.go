@@ -25,9 +25,6 @@ type ProcessModule struct {
 
 // NewProcessModule creates a new process module instance
 func NewProcessModule(vm *js.Runtime, loop *eventloop.EventLoop, version string) *ProcessModule {
-	if version == "" {
-		version = "v20.11.0" // Default fallback version
-	}
 	return &ProcessModule{
 		runtime:   vm,
 		startTime: time.Now(),
@@ -58,7 +55,7 @@ func (pm *ProcessModule) registerGlobals(vm *js.Runtime, exports *js.Object) {
 	// process.versions - include Go runtime and module versions
 	versions := vm.NewObject()
 	versions.Set("go", runtime.Version())
-	
+
 	// Get module versions from build info
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for _, dep := range buildInfo.Deps {
@@ -71,7 +68,7 @@ func (pm *ProcessModule) registerGlobals(vm *js.Runtime, exports *js.Object) {
 			versions.Set(moduleName, dep.Version)
 		}
 	}
-	
+
 	exports.Set("versions", versions)
 
 	// process.platform

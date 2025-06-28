@@ -29,7 +29,7 @@ type JavaScriptHandler struct {
 }
 
 func NewJavaScriptHandler(fs filesystem.FileSystem) *JavaScriptHandler {
-	return NewJavaScriptHandlerWithVersion(fs, "v20.11.0")
+	return NewJavaScriptHandlerWithVersion(fs, "")
 }
 
 func NewJavaScriptHandlerWithVersion(fs filesystem.FileSystem, version string) *JavaScriptHandler {
