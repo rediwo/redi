@@ -5,7 +5,7 @@ import (
 	"os"
 	
 	"github.com/dop251/goja_nodejs/console"
-	"github.com/dop251/goja_nodejs/require"
+	"github.com/rediwo/redi/modules"
 )
 
 // CustomPrinter implements the console.Printer interface
@@ -32,7 +32,14 @@ func NewCustomPrinter() *CustomPrinter {
 	return &CustomPrinter{}
 }
 
-// Enable registers the console module with custom printer in the given registry
-func Enable(registry *require.Registry) {
-	registry.RegisterNativeModule(console.ModuleName, console.RequireWithPrinter(NewCustomPrinter()))
+// init registers the console module automatically
+func init() {
+	modules.RegisterModule("console", initConsoleModule)
 }
+
+// initConsoleModule initializes the console module
+func initConsoleModule(config modules.ModuleConfig) error {
+	config.Registry.RegisterNativeModule(console.ModuleName, console.RequireWithPrinter(NewCustomPrinter()))
+	return nil
+}
+

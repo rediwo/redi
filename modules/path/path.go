@@ -6,12 +6,25 @@ import (
 	
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
+	"github.com/rediwo/redi/modules"
 )
 
 const ModuleName = "path"
 
-// Enable registers the path module in the given registry
-func Enable(registry *require.Registry) {
+// init registers the path module automatically
+func init() {
+	modules.RegisterModule("path", initPathModule)
+}
+
+// initPathModule initializes the path module
+func initPathModule(config modules.ModuleConfig) error {
+	registerPathGlobals(config.Registry)
+	return nil
+}
+
+
+// registerPathGlobals registers all path module functions
+func registerPathGlobals(registry *require.Registry) {
 	registry.RegisterNativeModule(ModuleName, func(runtime *js.Runtime, module *js.Object) {
 		exports := module.Get("exports").(*js.Object)
 		

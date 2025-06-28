@@ -9,6 +9,8 @@ import (
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/dop251/goja_nodejs/require"
+	"github.com/rediwo/redi/filesystem"
+	"github.com/rediwo/redi/modules"
 )
 
 func TestFSModule(t *testing.T) {
@@ -19,10 +21,22 @@ func TestFSModule(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 	
-	// Set up VM with fs module
+	// Set up VM and registry
 	vm := js.New()
 	registry := require.NewRegistry()
-	Enable(registry, tmpDir)
+	
+	// Use the actual initFSModule function to ensure we test the real code path
+	osFS := filesystem.NewOSFileSystem("")
+	config := modules.ModuleConfig{
+		Registry:   registry,
+		FileSystem: osFS,
+		BasePath:   tmpDir,
+		VM:         vm,
+	}
+	err = initFSModule(config)
+	if err != nil {
+		t.Fatalf("Failed to initialize fs module: %v", err)
+	}
 	registry.Enable(vm)
 	
 	// Get fs module
@@ -294,7 +308,20 @@ func TestFSModule(t *testing.T) {
 	// Create new VM for async tests
 	vmAsync := js.New()
 	registryAsync := require.NewRegistry()
-	EnableWithEventLoop(registryAsync, tmpDir, loop)
+	
+	// Use the actual initFSModule function for async testing
+	osfsAsync := filesystem.NewOSFileSystem("")
+	configAsync := modules.ModuleConfig{
+		Registry:   registryAsync,
+		FileSystem: osfsAsync,
+		BasePath:   tmpDir,
+		EventLoop:  loop,
+		VM:         vmAsync,
+	}
+	err = initFSModule(configAsync)
+	if err != nil {
+		t.Fatalf("Failed to initialize fs module for async tests: %v", err)
+	}
 	registryAsync.Enable(vmAsync)
 	
 	// Get fs module for async tests

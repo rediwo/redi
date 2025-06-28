@@ -10,6 +10,7 @@ import (
 
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
+	"github.com/rediwo/redi/modules"
 )
 
 // FetchResponse represents the response from a fetch request
@@ -24,6 +25,20 @@ type FetchResponse struct {
 // FetchModule provides Promise-based fetch functionality for JavaScript environments
 type FetchModule struct {
 	loop *eventloop.EventLoop
+}
+
+// init registers the fetch module automatically
+func init() {
+	modules.RegisterModule("fetch", initFetchModule)
+}
+
+// initFetchModule initializes the fetch module
+func initFetchModule(config modules.ModuleConfig) error {
+	if config.EventLoop != nil && config.VM != nil {
+		fetchModule := NewFetchModule(config.EventLoop)
+		fetchModule.RegisterGlobal(config.VM)
+	}
+	return nil
 }
 
 // NewFetchModule creates a new fetch module instance with event loop

@@ -5,13 +5,23 @@ import (
 	
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
+	"github.com/rediwo/redi/modules"
 )
 
 func TestPathModule(t *testing.T) {
-	// Set up VM with path module
+	// Set up VM and registry
 	vm := js.New()
 	registry := require.NewRegistry()
-	Enable(registry)
+	
+	// Use the actual initPathModule function to ensure we test the real code path
+	config := modules.ModuleConfig{
+		Registry: registry,
+		VM:       vm,
+	}
+	err := initPathModule(config)
+	if err != nil {
+		t.Fatalf("Failed to initialize path module: %v", err)
+	}
 	registry.Enable(vm)
 	
 	// Get path module

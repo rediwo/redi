@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,11 +15,13 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/rediwo/redi/filesystem"
-	"github.com/rediwo/redi/modules/console"
-	"github.com/rediwo/redi/modules/fetch"
-	"github.com/rediwo/redi/modules/fs"
-	"github.com/rediwo/redi/modules/path"
-	"github.com/rediwo/redi/modules/process"
+	
+	// Import all modules to trigger their init() functions
+	_ "github.com/rediwo/redi/modules/console"
+	_ "github.com/rediwo/redi/modules/fetch"
+	_ "github.com/rediwo/redi/modules/fs"
+	_ "github.com/rediwo/redi/modules/path"
+	_ "github.com/rediwo/redi/modules/process"
 )
 
 type JavaScriptHandler struct {
@@ -55,9 +56,6 @@ func (jh *JavaScriptHandler) Handle(route Route) http.HandlerFunc {
 
 		// Create a dedicated event loop for this request to ensure complete isolation
 		loop := eventloop.NewEventLoop()
-
-		// Create dedicated fetch module for this request
-		fetchModule := fetch.NewFetchModule(loop)
 
 		// Start the event loop in a separate goroutine
 		go loop.Start()
@@ -96,54 +94,15 @@ func (jh *JavaScriptHandler) Handle(route Route) http.HandlerFunc {
 				}
 			}()
 
-			// Set up require registry with Node.js modules and file loader
+			// Use the new VM manager to set up all modules automatically
+			vmManager := NewVMManager(jh.fs, jh.version)
 			currentDir := filepath.Dir(route.FilePath)
-			registry := require.NewRegistry(
-				require.WithGlobalFolders(currentDir),
-				require.WithLoader(func(name string) ([]byte, error) {
-					// Resolve relative paths from the current route's directory
-					var filePath string
-					if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") {
-						// Relative path - join with current directory
-						filePath = filepath.Join(currentDir, name)
-					} else {
-						// Module name without path (try in current directory)
-						filePath = filepath.Join(currentDir, name)
-					}
-
-					// Add .js extension if not present
-					if !strings.HasSuffix(filePath, ".js") && !strings.HasSuffix(filePath, ".json") {
-						if _, err := jh.fs.Stat(filePath + ".js"); err == nil {
-							filePath += ".js"
-						} else if _, err := jh.fs.Stat(filePath + ".json"); err == nil {
-							filePath += ".json"
-						}
-					}
-
-					// Security check: ensure file is within the route directory
-					if !strings.HasPrefix(filePath, currentDir) {
-						return nil, require.ModuleFileDoesNotExistError
-					}
-
-					// Read the file using unified filesystem interface
-					return jh.fs.ReadFile(filePath)
-				}),
-			)
-
-			// Register console module with custom printer
-			console.Enable(registry)
-
-			// Register fs module with event loop support (with restricted access to route directory)
-			fs.EnableWithEventLoopAndFS(registry, jh.fs, filepath.Dir(route.FilePath), loop)
-
-			// Register path module
-			path.Enable(registry)
-
-			// Register process module with event loop support
-			process.EnableWithEventLoop(registry, loop, jh.version)
-
-			// Enable the registry on the VM
-			registry.Enable(vm)
+			
+			_, setupErr := vmManager.SetupRegistry(loop, vm, currentDir)
+			if setupErr != nil {
+				done <- fmt.Errorf("failed to setup registry: %v", setupErr)
+				return
+			}
 
 			// Set up console object
 			consoleObj := require.Require(vm, "console")
@@ -151,9 +110,6 @@ func (jh *JavaScriptHandler) Handle(route Route) http.HandlerFunc {
 
 			vm.Set("req", reqObj)
 			vm.Set("res", resObj)
-
-			// Register fetch functionality with dedicated module
-			fetchModule.RegisterGlobal(vm)
 
 			// Note: setTimeout, setInterval, etc. are already available in the EventLoop VM
 			_, err := vm.RunString(string(content))

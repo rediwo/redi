@@ -8,8 +8,8 @@ import (
 	
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
-	"github.com/dop251/goja_nodejs/require"
 	"github.com/rediwo/redi/filesystem"
+	"github.com/rediwo/redi/modules"
 )
 
 const ModuleName = "fs"
@@ -41,28 +41,27 @@ func NewFSModuleWithFS(fs filesystem.FileSystem, basePath string, loop *eventloo
 	}
 }
 
-// Enable registers the fs module in the given registry (legacy API)
-func Enable(registry *require.Registry, basePath string) {
-	EnableWithEventLoop(registry, basePath, nil)
+// init registers the fs module automatically
+func init() {
+	modules.RegisterModule("fs", initFSModule)
 }
 
-// EnableWithEventLoop registers the fs module in the given registry with event loop support
-func EnableWithEventLoop(registry *require.Registry, basePath string, loop *eventloop.EventLoop) {
-	fsModule := NewFSModule(basePath, loop)
-	registry.RegisterNativeModule(ModuleName, func(runtime *js.Runtime, module *js.Object) {
+// initFSModule initializes the fs module
+func initFSModule(config modules.ModuleConfig) error {
+	var fsModule *FSModule
+	if config.FileSystem != nil {
+		fsModule = NewFSModuleWithFS(config.FileSystem, config.BasePath, config.EventLoop)
+	} else {
+		fsModule = NewFSModule(config.BasePath, config.EventLoop)
+	}
+	
+	config.Registry.RegisterNativeModule(ModuleName, func(runtime *js.Runtime, module *js.Object) {
 		exports := module.Get("exports").(*js.Object)
 		fsModule.registerFunctions(runtime, exports)
 	})
+	return nil
 }
 
-// EnableWithEventLoopAndFS registers the fs module with custom filesystem support
-func EnableWithEventLoopAndFS(registry *require.Registry, fs filesystem.FileSystem, basePath string, loop *eventloop.EventLoop) {
-	fsModule := NewFSModuleWithFS(fs, basePath, loop)
-	registry.RegisterNativeModule(ModuleName, func(runtime *js.Runtime, module *js.Object) {
-		exports := module.Get("exports").(*js.Object)
-		fsModule.registerFunctions(runtime, exports)
-	})
-}
 
 // registerFunctions registers all fs functions on the exports object
 func (fsm *FSModule) registerFunctions(runtime *js.Runtime, exports *js.Object) {

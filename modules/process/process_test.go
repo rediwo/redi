@@ -10,15 +10,34 @@ import (
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/dop251/goja_nodejs/require"
+	"github.com/rediwo/redi/modules"
 )
 
 const testVersion = "v1.2.3"
 
-func TestProcessModule(t *testing.T) {
+// setupTestVM creates a VM with process module for testing
+func setupTestVM(loop *eventloop.EventLoop) *js.Runtime {
 	vm := js.New()
 	registry := require.NewRegistry()
-	Enable(registry)
+	
+	// Use the actual initProcessModule function to ensure we test the real code path
+	config := modules.ModuleConfig{
+		Registry:  registry,
+		EventLoop: loop,
+		Version:   testVersion,
+		VM:        vm,
+	}
+	err := initProcessModule(config)
+	if err != nil {
+		panic("Failed to initialize process module: " + err.Error())
+	}
 	registry.Enable(vm)
+	
+	return vm
+}
+
+func TestProcessModule(t *testing.T) {
+	vm := setupTestVM(nil)
 
 	// Test process module availability
 	_, err := vm.RunString(`
@@ -195,11 +214,8 @@ func TestProcessModule(t *testing.T) {
 		os.Setenv("TEST_PROCESS_ENV", "test_value")
 		defer os.Unsetenv("TEST_PROCESS_ENV")
 
-		// Create a new VM and registry to pick up the new environment variable
-		testVM := js.New()
-		testRegistry := require.NewRegistry()
-		Enable(testRegistry)
-		testRegistry.Enable(testVM)
+		// Create a new VM to pick up the new environment variable
+		testVM := setupTestVM(nil)
 
 		result, err := testVM.RunString(`
 			var process = require('process');
@@ -304,11 +320,7 @@ func TestProcessModule(t *testing.T) {
 
 func TestProcessVersion(t *testing.T) {
 	loop := eventloop.NewEventLoop()
-	registry := require.NewRegistry()
-	EnableWithEventLoop(registry, loop, testVersion)
-
-	vm := js.New()
-	registry.Enable(vm)
+	vm := setupTestVM(loop)
 
 	loop.Start()
 	defer loop.Stop()
@@ -360,11 +372,7 @@ func TestProcessVersion(t *testing.T) {
 
 func TestProcessVersions(t *testing.T) {
 	loop := eventloop.NewEventLoop()
-	registry := require.NewRegistry()
-	EnableWithEventLoop(registry, loop, testVersion)
-
-	vm := js.New()
-	registry.Enable(vm)
+	vm := setupTestVM(loop)
 
 	loop.Start()
 	defer loop.Stop()
@@ -417,11 +425,7 @@ func TestProcessVersions(t *testing.T) {
 
 func TestProcessNextTick(t *testing.T) {
 	loop := eventloop.NewEventLoop()
-	registry := require.NewRegistry()
-	EnableWithEventLoop(registry, loop, testVersion)
-
-	vm := js.New()
-	registry.Enable(vm)
+	vm := setupTestVM(loop)
 
 	// Set up test variables in the VM
 	vm.Set("testCalled", false)
@@ -568,10 +572,7 @@ func TestProcessNextTick(t *testing.T) {
 }
 
 func TestProcessChdir(t *testing.T) {
-	vm := js.New()
-	registry := require.NewRegistry()
-	Enable(registry)
-	registry.Enable(vm)
+	vm := setupTestVM(nil)
 
 	// Get original directory
 	originalDir, _ := os.Getwd()

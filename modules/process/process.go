@@ -10,7 +10,7 @@ import (
 
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
-	"github.com/dop251/goja_nodejs/require"
+	"github.com/rediwo/redi/modules"
 )
 
 const ModuleName = "process"
@@ -33,19 +33,21 @@ func NewProcessModule(vm *js.Runtime, loop *eventloop.EventLoop, version string)
 	}
 }
 
-// Enable registers the process module in the given registry (legacy API without event loop)
-func Enable(registry *require.Registry) {
-	EnableWithEventLoop(registry, nil, "")
+// init registers the process module automatically
+func init() {
+	modules.RegisterModule("process", initProcessModule)
 }
 
-// EnableWithEventLoop registers the process module in the given registry with event loop support
-func EnableWithEventLoop(registry *require.Registry, loop *eventloop.EventLoop, version string) {
-	registry.RegisterNativeModule(ModuleName, func(vm *js.Runtime, module *js.Object) {
+// initProcessModule initializes the process module
+func initProcessModule(config modules.ModuleConfig) error {
+	config.Registry.RegisterNativeModule(ModuleName, func(vm *js.Runtime, module *js.Object) {
 		exports := module.Get("exports").(*js.Object)
-		pm := NewProcessModule(vm, loop, version)
+		pm := NewProcessModule(vm, config.EventLoop, config.Version)
 		pm.registerGlobals(vm, exports)
 	})
+	return nil
 }
+
 
 // registerGlobals registers all process globals and functions
 func (pm *ProcessModule) registerGlobals(vm *js.Runtime, exports *js.Object) {
