@@ -17,6 +17,7 @@ import (
 	"github.com/rediwo/redi/handlers"
 
 	// Import all modules to trigger their init() functions
+	_ "github.com/rediwo/redi/modules/child_process"
 	_ "github.com/rediwo/redi/modules/console"
 	_ "github.com/rediwo/redi/modules/fetch"
 	_ "github.com/rediwo/redi/modules/fs"

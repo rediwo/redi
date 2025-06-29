@@ -13,10 +13,11 @@ This directory contains comprehensive test scripts for the rejs JavaScript runti
 
 ### Asynchronous Tests (require --timeout)
 ```bash
-# These tests need timeout for async operations (timers, HTTP requests)
-./rejs --timeout=3000 tests/test_basic.js    # ~0.9s - Console, process, timers
-./rejs --timeout=10000 tests/test_fs.js      # ~1-2s - File system operations  
-./rejs --timeout=20000 tests/test_fetch.js   # ~2-5s - HTTP requests
+# These tests need timeout for async operations (timers, HTTP requests, processes)
+./rejs --timeout=3000 tests/test_basic.js         # ~0.9s - Console, process, timers
+./rejs --timeout=10000 tests/test_fs.js           # ~1-2s - File system operations  
+./rejs --timeout=15000 tests/test_child_process.js # ~1-3s - Child process operations
+./rejs --timeout=20000 tests/test_fetch.js        # ~2-5s - HTTP requests
 ```
 
 ### Alternative Timeout Syntax
@@ -63,6 +64,16 @@ Module system and require functionality:
 - **Error handling**: Missing module detection
 - **Execution**: All synchronous operations, exits automatically
 
+### test_child_process.js ⚙️ (Process - requires --timeout)
+Child process module testing with all major functions:
+- **execSync**: Synchronous command execution with options and error handling
+- **exec**: Asynchronous command execution with callbacks
+- **spawn**: Basic process spawning functionality
+- **Platform compatibility**: Cross-platform command testing (Windows/Unix)
+- **Error handling**: Invalid command detection and proper error reporting
+- **Options support**: Working directory, encoding, and timeout settings
+- **Execution**: Process operations, needs ~15 seconds for reliability
+
 ### test_fetch.js 🌐 (Network - requires --timeout)
 HTTP client testing with all methods:
 - **GET**: JSON data retrieval and parsing
@@ -102,12 +113,14 @@ All tests should run without errors and display:
 | **Require** | `./rejs tests/test_require.js` | ~0.1s | 22 sync tests |
 | **Basic** | `./rejs --timeout=3000 tests/test_basic.js` | ~0.9s | Timers + console |
 | **FS** | `./rejs --timeout=10000 tests/test_fs.js` | ~1-2s | 13 file operations |
+| **Child Process** | `./rejs --timeout=15000 tests/test_child_process.js` | ~1-3s | 8 process tests |
 | **Fetch** | `./rejs --timeout=20000 tests/test_fetch.js` | ~2-5s | 4 HTTP requests |
 
 ## Requirements
 
 - **Internet connection** for fetch tests (uses httpbin.org)
 - **File system permissions** for fs tests (creates/deletes test files)
+- **Command execution permissions** for child_process tests (runs system commands)
 - **No external dependencies** - all modules are built-in
 
 ## Troubleshooting
