@@ -6,18 +6,6 @@ import (
 	"path/filepath"
 )
 
-// FileSystem unified file system interface
-type FileSystem interface {
-	ReadFile(name string) ([]byte, error)
-	Stat(name string) (fs.FileInfo, error)
-	WalkDir(root string, fn fs.WalkDirFunc) error
-	Sub(dir string) (FileSystem, error)
-	// GetFS returns the underlying fs.FS interface for integration with standard library
-	GetFS() fs.FS
-	// IsReadOnly returns whether the file system is read-only
-	IsReadOnly() bool
-}
-
 // OSFileSystem operating system-based file system
 type OSFileSystem struct {
 	root string
@@ -69,42 +57,4 @@ func (osfs *OSFileSystem) GetFS() fs.FS {
 
 func (osfs *OSFileSystem) IsReadOnly() bool {
 	return false
-}
-
-// EmbedFileSystem file system based on embed.FS
-type EmbedFileSystem struct {
-	embedFS fs.FS
-}
-
-// NewEmbedFileSystem creates a file system based on embed.FS
-func NewEmbedFileSystem(embedFS fs.FS) *EmbedFileSystem {
-	return &EmbedFileSystem{embedFS: embedFS}
-}
-
-func (efs *EmbedFileSystem) ReadFile(name string) ([]byte, error) {
-	return fs.ReadFile(efs.embedFS, name)
-}
-
-func (efs *EmbedFileSystem) Stat(name string) (fs.FileInfo, error) {
-	return fs.Stat(efs.embedFS, name)
-}
-
-func (efs *EmbedFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
-	return fs.WalkDir(efs.embedFS, root, fn)
-}
-
-func (efs *EmbedFileSystem) Sub(dir string) (FileSystem, error) {
-	subFS, err := fs.Sub(efs.embedFS, dir)
-	if err != nil {
-		return nil, err
-	}
-	return NewEmbedFileSystem(subFS), nil
-}
-
-func (efs *EmbedFileSystem) GetFS() fs.FS {
-	return efs.embedFS
-}
-
-func (efs *EmbedFileSystem) IsReadOnly() bool {
-	return true
 }
