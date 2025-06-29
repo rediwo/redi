@@ -4,35 +4,93 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	
+	"github.com/gorilla/mux"
 	"github.com/rediwo/redi/filesystem"
 )
 
-func TestMain(m *testing.M) {
-	// Setup test fixtures if they don't exist
-	setupTestFixtures()
+func setupMemoryFileSystem() *filesystem.MemoryFileSystem {
+	memFS := filesystem.NewMemoryFileSystem()
+	
+	// Layout file
+	memFS.WriteFile("routes/_layout/base.html", []byte(`<!DOCTYPE html>
+<html><head><title>{{.Title}} - Test Blog</title></head>
+<body><main>{{.Content}}</main></body></html>`))
+	
+	// Index page with layout
+	memFS.WriteFile("routes/index.html", []byte(`{{layout 'base'}}
+<h1>Welcome to Test Blog</h1>`))
+	
+	// About markdown page
+	memFS.WriteFile("routes/about.md", []byte(`# About Our Test Blog
 
-	// Run tests
-	code := m.Run()
+This is a **test blog** built using the **Redi frontend server**.`))
+	
+	// API users
+	memFS.WriteFile("routes/api/users.js", []byte(`var users = [
+    { id: 1, name: "John Doe", email: "john@example.com" }
+];
 
-	os.Exit(code)
-}
+exports.get = function(req, res, next) {
+    res.json({ success: true, data: users });
+};
 
-func setupTestFixtures() {
-	// This function ensures fixtures exist for testing
-	fixturesDir := "fixtures"
-	if _, err := os.Stat(fixturesDir); os.IsNotExist(err) {
-		// If fixtures don't exist, tests will fail
-		// In real scenarios, fixtures should be created beforehand
-	}
+exports.post = function(req, res, next) {
+    res.status(201);
+    res.json({ success: true, message: "User created" });
+};`))
+	
+	// API login
+	memFS.WriteFile("routes/api/login.js", []byte(`exports.post = function(req, res, next) {
+    if (req.body) {
+        var credentials = JSON.parse(req.body);
+        if (credentials.username === "admin" && credentials.password === "admin123") {
+            res.json({ success: true, message: "Login successful" });
+        } else {
+            res.status(401);
+            res.json({ success: false, message: "Invalid credentials" });
+        }
+    } else {
+        res.status(400);
+        res.json({ success: false, message: "Request body required" });
+    }
+};`))
+	
+	// API stats
+	memFS.WriteFile("routes/api/stats.js", []byte(`var stats = { server: "Redi", version: "1.0.0" };
+
+exports.get = function(req, res, next) {
+    res.json({ success: true, data: stats });
+};`))
+	
+	// Dynamic blog route
+	memFS.WriteFile("routes/blog/[id].html", []byte(`<h1>Blog Post {{.id}}</h1>
+<p>Content for post ID: {{.id}}</p>`))
+	
+	// Login page
+	memFS.WriteFile("routes/login.html", []byte(`<h1>Login</h1>
+<form><input type="text" name="username"><input type="password" name="password"></form>`))
+	
+	// Users page
+	memFS.WriteFile("routes/users.html", []byte(`<h1>Users</h1>
+<div id="users-list">Loading users...</div>`))
+	
+	// Static CSS
+	memFS.WriteFile("public/css/style.css", []byte(`body { font-family: Arial; }`))
+	
+	return memFS
 }
 
 func TestServerInitialization(t *testing.T) {
-	server := NewServer("fixtures", 8080)
+	memFS := setupMemoryFileSystem()
+	server := &Server{
+		router: mux.NewRouter(),
+		port:   8080,
+		fs:     memFS,
+	}
 
 	if server.port != 8080 {
 		t.Errorf("Expected port to be 8080, got %d", server.port)
@@ -48,8 +106,8 @@ func TestServerInitialization(t *testing.T) {
 }
 
 func TestRouteScanning(t *testing.T) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	scanner := NewRouteScanner(fs, "routes")
+	memFS := setupMemoryFileSystem()
+	scanner := NewRouteScanner(memFS, "routes")
 
 	routes, err := scanner.ScanRoutes()
 	if err != nil {
@@ -76,7 +134,12 @@ func TestRouteScanning(t *testing.T) {
 }
 
 func TestStaticFileServer(t *testing.T) {
-	server := NewServer("fixtures", 8080)
+	memFS := setupMemoryFileSystem()
+	server := &Server{
+		router: mux.NewRouter(),
+		port:   8080,
+		fs:     memFS,
+	}
 	server.setupStaticFileServer()
 
 	// Test CSS file serving
@@ -97,8 +160,8 @@ func TestStaticFileServer(t *testing.T) {
 
 func TestMarkdownHandler(t *testing.T) {
 	// Use HandlerManager to test through the unified interface
-	fs := filesystem.NewOSFileSystem("fixtures")
-	handlerManager := NewHandlerManager(fs)
+	memFS := setupMemoryFileSystem()
+	handlerManager := NewHandlerManager(memFS)
 	route := Route{
 		Path:     "/about",
 		FilePath: filepath.Join("routes", "about.md"),
@@ -127,8 +190,8 @@ func TestMarkdownHandler(t *testing.T) {
 }
 
 func TestJavaScriptAPIHandler(t *testing.T) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	handlerManager := NewHandlerManager(fs)
+	memFS := setupMemoryFileSystem()
+	handlerManager := NewHandlerManager(memFS)
 	route := Route{
 		Path:     "/api/users",
 		FilePath: filepath.Join("routes", "api", "users.js"),
@@ -163,8 +226,8 @@ func TestJavaScriptAPIHandler(t *testing.T) {
 }
 
 func TestJavaScriptAPILoginEndpoint(t *testing.T) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	handlerManager := NewHandlerManager(fs)
+	memFS := setupMemoryFileSystem()
+	handlerManager := NewHandlerManager(memFS)
 	route := Route{
 		Path:     "/api/login",
 		FilePath: filepath.Join("routes", "api", "login.js"),
@@ -208,8 +271,8 @@ func TestJavaScriptAPILoginEndpoint(t *testing.T) {
 }
 
 func TestHTMLTemplateHandler(t *testing.T) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	handlerManager := NewHandlerManager(fs)
+	memFS := setupMemoryFileSystem()
+	handlerManager := NewHandlerManager(memFS)
 	route := Route{
 		Path:     "/",
 		FilePath: filepath.Join("routes", "index.html"),
@@ -238,15 +301,15 @@ func TestHTMLTemplateHandler(t *testing.T) {
 		t.Error("Expected HTML layout to be applied")
 	}
 
-	// Check that server script was executed
+	// Check that content is rendered
 	if !strings.Contains(body, "Welcome to Test Blog") {
-		t.Error("Expected server script data to be rendered")
+		t.Error("Expected page content to be rendered")
 	}
 }
 
 func TestDynamicRouting(t *testing.T) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	scanner := NewRouteScanner(fs, "routes")
+	memFS := setupMemoryFileSystem()
+	scanner := NewRouteScanner(memFS, "routes")
 	routes, err := scanner.ScanRoutes()
 	if err != nil {
 		t.Fatalf("Error scanning routes: %v", err)
@@ -282,8 +345,8 @@ func TestDynamicRouting(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkRouteScanning(b *testing.B) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	scanner := NewRouteScanner(fs, "routes")
+	memFS := setupMemoryFileSystem()
+	scanner := NewRouteScanner(memFS, "routes")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -295,8 +358,8 @@ func BenchmarkRouteScanning(b *testing.B) {
 }
 
 func BenchmarkMarkdownConversion(b *testing.B) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	handlerManager := NewHandlerManager(fs)
+	memFS := setupMemoryFileSystem()
+	handlerManager := NewHandlerManager(memFS)
 	route := Route{
 		Path:     "/about",
 		FilePath: filepath.Join("routes", "about.md"),
@@ -314,8 +377,8 @@ func BenchmarkMarkdownConversion(b *testing.B) {
 }
 
 func BenchmarkJavaScriptExecution(b *testing.B) {
-	fs := filesystem.NewOSFileSystem("fixtures")
-	handlerManager := NewHandlerManager(fs)
+	memFS := setupMemoryFileSystem()
+	handlerManager := NewHandlerManager(memFS)
 	route := Route{
 		Path:     "/api/stats",
 		FilePath: filepath.Join("routes", "api", "stats.js"),

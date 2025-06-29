@@ -1,0 +1,172 @@
+{{layout 'base'}}
+
+<div x-data="{
+    isLoading: false,
+    
+    async testPUT() {
+        this.isLoading = true;
+        try {
+            await fetch('/method-example', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({message: 'Hello PUT', timestamp: Date.now()})
+            });
+            location.reload();
+        } catch (error) {
+            console.error('Error:', error);
+        } finally {
+            this.isLoading = false;
+        }
+    },
+    
+    async testDELETE() {
+        this.isLoading = true;
+        try {
+            await fetch('/method-example', { method: 'DELETE' });
+            location.reload();
+        } catch (error) {
+            console.error('Error:', error);
+        } finally {
+            this.isLoading = false;
+        }
+    }
+}">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-4">{{.Title}}</h1>
+        <nav class="flex items-center space-x-2 text-sm text-gray-500">
+            <a href="/" class="hover:text-primary-600 transition-colors">Home</a>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+            <span class="text-gray-900 font-medium">HTTP Method Testing</span>
+        </nav>
+    </div>
+
+    <!-- Current Method Info -->
+    <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8">
+        <div class="flex items-center mb-4">
+            <div class="p-2 bg-blue-100 rounded-lg mr-3">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <h2 class="text-xl font-semibold text-gray-900">Request Information</h2>
+        </div>
+        
+        <div class="grid md:grid-cols-2 gap-4 mb-4">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-600 mb-1">HTTP Method</p>
+                <p class="text-lg font-bold text-primary-600">{{.method}}</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-600 mb-1">Response Message</p>
+                <p class="text-lg font-semibold text-gray-900">{{.message}}</p>
+            </div>
+        </div>
+        
+        {{if .receivedData}}
+        <div class="mt-4">
+            <h3 class="text-lg font-semibold text-gray-900 mb-3">Received Data</h3>
+            <pre class="bg-gray-100 rounded-lg p-4 text-sm text-gray-800 overflow-x-auto border">{{.receivedData}}</pre>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- HTTP Method Tests -->
+    <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div class="flex items-center mb-6">
+            <div class="p-2 bg-green-100 rounded-lg mr-3">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+            </div>
+            <h2 class="text-xl font-semibold text-gray-900">Test Different HTTP Methods</h2>
+        </div>
+        
+        <div class="space-y-8">
+            <!-- GET Request -->
+            <div class="border border-gray-200 rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded mr-3">GET</span>
+                    GET Request
+                </h3>
+                <form method="GET" action="/method-example" class="flex flex-col sm:flex-row gap-4">
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors inline-flex items-center justify-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                        Send GET Request
+                    </button>
+                </form>
+            </div>
+
+            <!-- POST Request -->
+            <div class="border border-gray-200 rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded mr-3">POST</span>
+                    POST Request
+                </h3>
+                <form method="POST" action="/method-example" class="flex flex-col sm:flex-row gap-4">
+                    <input type="text" name="testData" placeholder="Enter test data" value="Hello POST"
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors inline-flex items-center justify-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                        Send POST Request
+                    </button>
+                </form>
+            </div>
+
+            <!-- JavaScript Tests (PUT & DELETE) -->
+            <div class="border border-gray-200 rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded mr-3">JS</span>
+                    JavaScript AJAX Tests
+                </h3>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button @click="testPUT()" :disabled="isLoading"
+                            class="bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white font-medium py-2 px-4 rounded-lg transition-colors inline-flex items-center justify-center">
+                        <svg x-show="!isLoading" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <svg x-show="isLoading" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isLoading ? 'Sending...' : 'Send PUT Request'"></span>
+                    </button>
+                    
+                    <button @click="testDELETE()" :disabled="isLoading"
+                            class="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-medium py-2 px-4 rounded-lg transition-colors inline-flex items-center justify-center">
+                        <svg x-show="!isLoading" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <svg x-show="isLoading" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isLoading ? 'Sending...' : 'Send DELETE Request'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Info Box -->
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex items-start">
+                <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div>
+                    <h4 class="text-sm font-medium text-blue-900 mb-1">How it works</h4>
+                    <p class="text-sm text-blue-800">
+                        This page demonstrates different HTTP methods. GET and POST use traditional form submissions, 
+                        while PUT and DELETE use JavaScript fetch API with AJAX calls. The page reloads after each request to show the updated response.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 	
 	"github.com/rediwo/redi"
 )
@@ -40,10 +41,30 @@ func main() {
 	var root string
 	var port int
 	var version bool
+	var logFile string
+	var daemon bool
 
 	flag.StringVar(&root, "root", "", "Root directory containing public and routes folders")
 	flag.IntVar(&port, "port", 8080, "Port to serve on")
 	flag.BoolVar(&version, "version", false, "Show version information")
+	flag.StringVar(&logFile, "log", "", "Log file path (enables background mode like nohup)")
+	flag.BoolVar(&daemon, "daemon", false, "Internal flag for daemon mode")
+	
+	// Custom usage message
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Redi Frontend Server - Dynamic web serving with JavaScript, Markdown, and templates\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --port=8080          # Run in foreground\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --log=server.log     # Run in background (like nohup)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --version                          # Show version\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nWhen using --log, the server runs in background mode and all output\n")
+		fmt.Fprintf(os.Stderr, "is redirected to the log file. A PID file (.pid) is also created.\n")
+		fmt.Fprintf(os.Stderr, "Use 'kill $(cat logfile.pid)' to stop the background server.\n")
+	}
+	
 	flag.Parse()
 
 	if version {
@@ -63,6 +84,19 @@ func main() {
 	}
 
 	currentVersion := getVersion()
+	
+	// If daemon flag is set, start as daemon
+	if daemon {
+		startServerDaemon(root, port, currentVersion)
+		return
+	}
+	
+	// If log file is specified, run in background mode
+	if logFile != "" {
+		runInBackground(root, port, logFile, currentVersion)
+		return
+	}
+
 	server := redi.NewServerWithVersion(root, port, currentVersion)
 	log.Printf("Starting redi server %s on port %d, serving from %s", currentVersion, port, root)
 
@@ -845,4 +879,90 @@ func getGitVersion() string {
 	
 	// If git is not available or not a git repository, return empty
 	return ""
+}
+
+// runInBackground starts the server in background mode with log redirection
+func runInBackground(root string, port int, logFilePath, version string) {
+	// Create a new process group and detach from terminal
+	cmd := exec.Command(os.Args[0])
+	
+	// Copy all arguments except --log to the new process, add --daemon
+	newArgs := []string{}
+	skipNext := false
+	for _, arg := range os.Args[1:] {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if arg == "--log" {
+			skipNext = true
+			continue
+		}
+		if strings.HasPrefix(arg, "--log=") {
+			continue
+		}
+		newArgs = append(newArgs, arg)
+	}
+	newArgs = append(newArgs, "--daemon")
+	cmd.Args = append([]string{os.Args[0]}, newArgs...)
+
+	// Set up the log file for the background process
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to open log file %s: %v\n", logFilePath, err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	// Write startup header to log file
+	fmt.Fprintf(logFile, "\n=== Redi Server Starting in Background Mode ===\n")
+	fmt.Fprintf(logFile, "Time: %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(logFile, "Version: %s\n", version)
+	fmt.Fprintf(logFile, "Port: %d\n", port)
+	fmt.Fprintf(logFile, "Root: %s\n", root)
+	fmt.Fprintf(logFile, "================================================\n")
+
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	
+	// Platform-specific process attributes
+	setPlatformSpecificAttributes(cmd)
+	
+	err = cmd.Start()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to start background process: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Print success message to terminal before exiting
+	fmt.Printf("Redi server started in background mode\n")
+	fmt.Printf("Version: %s\n", version)
+	fmt.Printf("Port: %d\n", port)
+	fmt.Printf("Root: %s\n", root)
+	fmt.Printf("Log file: %s\n", logFilePath)
+	fmt.Printf("PID: %d\n", cmd.Process.Pid)
+	fmt.Printf("Server URL: http://localhost:%d\n", port)
+	
+	// Write PID file
+	pidFile := logFilePath + ".pid"
+	pidContent := fmt.Sprintf("%d", cmd.Process.Pid)
+	err = os.WriteFile(pidFile, []byte(pidContent), 0644)
+	if err != nil {
+		fmt.Printf("Warning: Failed to write PID file %s: %v\n", pidFile, err)
+	} else {
+		fmt.Printf("PID file: %s\n", pidFile)
+	}
+
+	// Exit the parent process
+	os.Exit(0)
+}
+
+// startServerDaemon starts the actual server daemon
+func startServerDaemon(root string, port int, version string) {
+	server := redi.NewServerWithVersion(root, port, version)
+	log.Printf("Starting redi server %s on port %d, serving from %s", version, port, root)
+
+	if err := server.Start(); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }

@@ -8,9 +8,15 @@ import (
 	"time"
 )
 
+// MemoryFileInfo represents file metadata
+type MemoryFileData struct {
+	content []byte
+	modTime time.Time
+}
+
 // MemoryFileSystem in-memory file system for testing
 type MemoryFileSystem struct {
-	files map[string][]byte
+	files map[string]*MemoryFileData
 	mu    sync.RWMutex
 }
 
@@ -32,7 +38,7 @@ func (m *MemoryFileInfo) Sys() any           { return nil }
 // NewMemoryFileSystem creates a new in-memory file system
 func NewMemoryFileSystem() *MemoryFileSystem {
 	return &MemoryFileSystem{
-		files: make(map[string][]byte),
+		files: make(map[string]*MemoryFileData),
 	}
 }
 
@@ -40,7 +46,10 @@ func NewMemoryFileSystem() *MemoryFileSystem {
 func (mfs *MemoryFileSystem) WriteFile(name string, data []byte) error {
 	mfs.mu.Lock()
 	defer mfs.mu.Unlock()
-	mfs.files[name] = data
+	mfs.files[name] = &MemoryFileData{
+		content: data,
+		modTime: time.Now(),
+	}
 	return nil
 }
 
@@ -48,14 +57,14 @@ func (mfs *MemoryFileSystem) ReadFile(name string) ([]byte, error) {
 	mfs.mu.RLock()
 	defer mfs.mu.RUnlock()
 	
-	data, exists := mfs.files[name]
+	fileData, exists := mfs.files[name]
 	if !exists {
 		return nil, fs.ErrNotExist
 	}
 	
 	// Return a copy to prevent modification
-	result := make([]byte, len(data))
-	copy(result, data)
+	result := make([]byte, len(fileData.content))
+	copy(result, fileData.content)
 	return result, nil
 }
 
@@ -63,16 +72,16 @@ func (mfs *MemoryFileSystem) Stat(name string) (fs.FileInfo, error) {
 	mfs.mu.RLock()
 	defer mfs.mu.RUnlock()
 	
-	data, exists := mfs.files[name]
+	fileData, exists := mfs.files[name]
 	if !exists {
 		return nil, fs.ErrNotExist
 	}
 	
 	return &MemoryFileInfo{
 		name: filepath.Base(name),
-		size: int64(len(data)),
+		size: int64(len(fileData.content)),
 		mode: 0644,
-		time: time.Now(),
+		time: fileData.modTime,
 	}, nil
 }
 
@@ -103,13 +112,13 @@ func (mfs *MemoryFileSystem) Sub(dir string) (FileSystem, error) {
 	
 	subFS := NewMemoryFileSystem()
 	
-	for path, data := range mfs.files {
+	for path, fileData := range mfs.files {
 		if hasPathPrefix(path, dir) {
 			relPath, err := filepath.Rel(dir, path)
 			if err != nil {
 				continue
 			}
-			subFS.WriteFile(relPath, data)
+			subFS.WriteFile(relPath, fileData.content)
 		}
 	}
 	

@@ -2,41 +2,194 @@ package redi
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
+	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/rediwo/redi/filesystem"
 )
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+func setupIntegrationMemoryFS() *filesystem.MemoryFileSystem {
+	memFS := filesystem.NewMemoryFileSystem()
+	
+	// Layout files
+	memFS.WriteFile("routes/_layout/base.html", []byte(`<!DOCTYPE html>
+<html><head><title>{{.Title}} - Test Blog</title></head>
+<body><main>{{.Content}}</main></body></html>`))
+	
+	memFS.WriteFile("routes/_layout/admin.html", []byte(`<!DOCTYPE html>
+<html><head><title>Admin - {{.Title}}</title></head>
+<body><header>Admin Panel</header><main>{{.Content}}</main></body></html>`))
+	
+	// Index page
+	memFS.WriteFile("routes/index.js", []byte(`exports.get = function(req, res, next) {
+    res.render({
+        Title: "Welcome to Test Blog"
+    });
+};`))
+	
+	memFS.WriteFile("routes/index.html", []byte(`{{layout 'base'}}
+
+<h1>Welcome to Test Blog</h1>
+<p>This is a test blog built with Redi frontend server.</p>`))
+	
+	// About markdown page
+	memFS.WriteFile("routes/about.md", []byte(`# About Our Test Blog
+
+This is a **test blog** built using the **Redi frontend server**.`))
+	
+	// API endpoints
+	memFS.WriteFile("routes/api/users.js", []byte(`var users = [
+    { id: 1, name: "John Doe", email: "john@example.com", role: "admin" },
+    { id: 2, name: "Jane Smith", email: "jane@example.com", role: "editor" }
+];
+
+exports.get = function(req, res, next) {
+    res.json({ success: true, data: users, count: users.length });
+};
+
+exports.post = function(req, res, next) {
+    var userData = JSON.parse(req.body);
+    var newUser = {
+        id: users.length + 1,
+        name: userData.name,
+        email: userData.email,
+        role: userData.role || 'user'
+    };
+    users.push(newUser);
+    res.status(201);
+    res.json({ success: true, data: newUser });
+};`))
+	
+	memFS.WriteFile("routes/api/login.js", []byte(`exports.post = function(req, res, next) {
+    var credentials = JSON.parse(req.body);
+    if (credentials.username === "admin" && credentials.password === "admin123") {
+        res.json({
+            success: true,
+            message: "Login successful",
+            data: { username: "admin", role: "admin", token: "mock-token" }
+        });
+    } else {
+        res.status(401);
+        res.json({ success: false, message: "Invalid credentials" });
+    }
+};`))
+	
+	memFS.WriteFile("routes/api/stats.js", []byte(`var stats = {
+    server: { name: "Redi Frontend Server", version: "1.0.0" },
+    content: { totalPosts: 15, publishedPosts: 12 },
+    traffic: { todayViews: 100, weeklyViews: 500 },
+    performance: { averageResponseTime: 50, memoryUsage: 75 },
+    features: { markdownSupport: true, jsEngineSupport: true }
+};
+
+exports.get = function(req, res, next) {
+    var category = req.query ? req.query.category : null;
+    if (category && stats[category]) {
+        res.json({ success: true, category: category, data: stats[category] });
+    } else {
+        res.json({ success: true, data: stats });
+    }
+};`))
+	
+	memFS.WriteFile("routes/api/posts.js", []byte(`var posts = [
+    { id: 1, title: "First Post", content: "Content 1", status: "published" },
+    { id: 2, title: "Second Post", content: "Content 2", status: "draft" }
+];
+
+exports.get = function(req, res, next) {
+    var status = req.query ? req.query.status : null;
+    var filteredPosts = status ? posts.filter(function(p) { return p.status === status; }) : posts;
+    res.json({ success: true, data: filteredPosts });
+};
+
+exports.post = function(req, res, next) {
+    var postData = JSON.parse(req.body);
+    var newPost = {
+        id: posts.length + 1,
+        title: postData.title,
+        content: postData.content,
+        author: postData.author,
+        status: "published"
+    };
+    posts.push(newPost);
+    res.status(201);
+    res.json({ success: true, data: newPost });
+};`))
+	
+	// Dynamic blog route
+	memFS.WriteFile("routes/blog/[id].js", []byte(`var posts = {
+    "1": { id: 1, title: "Welcome to our blog", content: "First blog post content" },
+    "2": { id: 2, title: "Getting started with Redi", content: "Second blog post content" },
+    "123": { id: 123, title: "Dynamic Route Example", content: "Example dynamic content" }
+};
+
+exports.get = function(req, res, next) {
+    var postId = req.params.id;
+    var post = posts[postId];
+
+    if (!post) {
+        res.status(404);
+        res.render({ Title: "Post Not Found", error: "Post not found" });
+    } else {
+        res.render({ Title: post.title, post: post });
+    }
+};`))
+	
+	memFS.WriteFile("routes/blog/[id].html", []byte(`{{layout 'base'}}
+
+{{if .error}}
+<h1>404 - Post Not Found</h1>
+<p>The requested blog post could not be found.</p>
+{{else}}
+<h1>{{.post.title}}</h1>
+<p>{{.post.content}}</p>
+{{end}}`))
+	
+	// Admin page
+	memFS.WriteFile("routes/admin/index.js", []byte(`exports.get = function(req, res, next) {
+    res.render({
+        Title: "Dashboard"
+    });
+};`))
+	
+	memFS.WriteFile("routes/admin/index.html", []byte(`{{layout 'admin'}}
+
+<h1>Admin Dashboard</h1>
+<p>Welcome to the admin panel.</p>`))
+	
+	// Static files
+	memFS.WriteFile("public/css/style.css", []byte(`body { 
+    font-family: Arial, sans-serif; 
+    margin: 0; 
+    padding: 20px; 
+}`))
+	
+	memFS.WriteFile("public/js/main.js", []byte(`document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded');
+});`))
+	
+	return memFS
 }
 
-// Integration tests that test the complete server functionality
 func TestServerIntegration(t *testing.T) {
-	// Skip if fixtures don't exist
-	if _, err := os.Stat("fixtures"); os.IsNotExist(err) {
-		t.Skip("Fixtures directory not found, skipping integration tests")
+	memFS := setupIntegrationMemoryFS()
+	
+	// Create server with memory filesystem
+	server := &Server{
+		router: mux.NewRouter(),
+		port:   8080,
+		fs:     memFS,
 	}
-
-	// Start server in background
-	server := NewServer("fixtures", 8899) // Use different port for testing
-
-	go func() {
-		if err := server.Start(); err != nil {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-
-	// Wait for server to start
-	time.Sleep(100 * time.Millisecond)
-
-	// Test cases
+	
+	// Setup routes and static server
+	if err := server.setupRoutes(); err != nil {
+		t.Fatalf("Failed to setup routes: %v", err)
+	}
+	server.setupStaticFileServer()
+	
 	testCases := []struct {
 		name           string
 		path           string
@@ -117,53 +270,42 @@ func TestServerIntegration(t *testing.T) {
 			expectedStatus: 404,
 		},
 	}
-
-	baseURL := "http://localhost:8899"
-
+	
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			url := baseURL + tc.path
-
-			var resp *http.Response
-			var err error
-
-			if tc.method == "GET" {
-				resp, err = http.Get(url)
+			var req *http.Request
+			if tc.body != "" {
+				req = httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+				req.Header.Set("Content-Type", "application/json")
 			} else {
-				req, _ := http.NewRequest(tc.method, url, strings.NewReader(tc.body))
-				if tc.body != "" {
-					req.Header.Set("Content-Type", "application/json")
-				}
-				client := &http.Client{}
-				resp, err = client.Do(req)
+				req = httptest.NewRequest(tc.method, tc.path, nil)
 			}
-
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
-			defer resp.Body.Close()
-
+			
+			w := httptest.NewRecorder()
+			server.router.ServeHTTP(w, req)
+			
 			// Check status code
-			if resp.StatusCode != tc.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tc.expectedStatus, resp.StatusCode)
+			if w.Code != tc.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tc.expectedStatus, w.Code)
 			}
-
+			
 			// Check content type if specified
 			if tc.expectedType != "" {
-				contentType := resp.Header.Get("Content-Type")
+				contentType := w.Header().Get("Content-Type")
 				if !strings.Contains(contentType, tc.expectedType) {
 					t.Errorf("Expected content type to contain %s, got %s", tc.expectedType, contentType)
 				}
 			}
-
+			
 			// Check response body if specified
 			if tc.expectedText != "" {
-				body := make([]byte, 4096)
-				n, _ := resp.Body.Read(body)
-				bodyStr := string(body[:n])
-
-				if !strings.Contains(bodyStr, tc.expectedText) {
-					t.Errorf("Expected response to contain %s, got first 500 chars: %s", tc.expectedText, bodyStr[:min(500, len(bodyStr))])
+				body := w.Body.String()
+				if !strings.Contains(body, tc.expectedText) {
+					maxLen := 500
+					if len(body) < maxLen {
+						maxLen = len(body)
+					}
+					t.Errorf("Expected response to contain %s, got first %d chars: %s", tc.expectedText, maxLen, body[:maxLen])
 				}
 			}
 		})
@@ -171,159 +313,140 @@ func TestServerIntegration(t *testing.T) {
 }
 
 func TestAPIEndpointsIntegration(t *testing.T) {
-	// Skip if fixtures don't exist
-	if _, err := os.Stat("fixtures"); os.IsNotExist(err) {
-		t.Skip("Fixtures directory not found, skipping API integration tests")
+	memFS := setupIntegrationMemoryFS()
+	
+	server := &Server{
+		router: mux.NewRouter(),
+		port:   8080,
+		fs:     memFS,
 	}
-
-	// Start server in background
-	server := NewServer("fixtures", 8898) // Use different port for testing
-
-	go func() {
-		if err := server.Start(); err != nil {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-
-	// Wait for server to start
-	time.Sleep(100 * time.Millisecond)
-
-	baseURL := "http://localhost:8898"
-
+	
+	if err := server.setupRoutes(); err != nil {
+		t.Fatalf("Failed to setup routes: %v", err)
+	}
+	
 	t.Run("Login API", func(t *testing.T) {
 		// Test valid login
 		loginData := `{"username":"admin","password":"admin123"}`
-		resp, err := http.Post(baseURL+"/api/login", "application/json",
-			strings.NewReader(loginData))
-
-		if err != nil {
-			t.Fatalf("Login request failed: %v", err)
+		req := httptest.NewRequest("POST", "/api/login", strings.NewReader(loginData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w, req)
+		
+		if w.Code != 200 {
+			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-
+		
 		var result map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
-
+		
 		if success, ok := result["success"].(bool); !ok || !success {
 			t.Error("Expected successful login")
 		}
-
+		
 		// Test invalid login
 		invalidData := `{"username":"invalid","password":"wrong"}`
-		resp2, err := http.Post(baseURL+"/api/login", "application/json",
-			strings.NewReader(invalidData))
-
-		if err != nil {
-			t.Fatalf("Invalid login request failed: %v", err)
-		}
-		defer resp2.Body.Close()
-
-		if resp2.StatusCode != 401 {
-			t.Errorf("Expected status 401 for invalid login, got %d", resp2.StatusCode)
+		req2 := httptest.NewRequest("POST", "/api/login", strings.NewReader(invalidData))
+		req2.Header.Set("Content-Type", "application/json")
+		w2 := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w2, req2)
+		
+		if w2.Code != 401 {
+			t.Errorf("Expected status 401 for invalid login, got %d", w2.Code)
 		}
 	})
-
+	
 	t.Run("Users API", func(t *testing.T) {
 		// Test GET users
-		resp, err := http.Get(baseURL + "/api/users")
-		if err != nil {
-			t.Fatalf("GET users request failed: %v", err)
+		req := httptest.NewRequest("GET", "/api/users", nil)
+		w := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w, req)
+		
+		if w.Code != 200 {
+			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-
+		
 		var result map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
-
+		
 		if success, ok := result["success"].(bool); !ok || !success {
 			t.Error("Expected successful response")
 		}
-
+		
 		if data, ok := result["data"].([]interface{}); !ok || len(data) == 0 {
 			t.Error("Expected user data in response")
 		}
-
+		
 		// Test POST new user
 		userData := `{"name":"Test User","email":"test@example.com","role":"user"}`
-		resp2, err := http.Post(baseURL+"/api/users", "application/json",
-			strings.NewReader(userData))
-
-		if err != nil {
-			t.Fatalf("POST user request failed: %v", err)
-		}
-		defer resp2.Body.Close()
-
-		if resp2.StatusCode != 201 {
-			t.Errorf("Expected status 201 for new user, got %d", resp2.StatusCode)
+		req2 := httptest.NewRequest("POST", "/api/users", strings.NewReader(userData))
+		req2.Header.Set("Content-Type", "application/json")
+		w2 := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w2, req2)
+		
+		if w2.Code != 201 {
+			t.Errorf("Expected status 201 for new user, got %d", w2.Code)
 		}
 	})
-
+	
 	t.Run("Posts API", func(t *testing.T) {
 		// Test GET posts
-		resp, err := http.Get(baseURL + "/api/posts")
-		if err != nil {
-			t.Fatalf("GET posts request failed: %v", err)
+		req := httptest.NewRequest("GET", "/api/posts", nil)
+		w := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w, req)
+		
+		if w.Code != 200 {
+			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-
+		
 		// Test GET posts with filter
-		resp2, err := http.Get(baseURL + "/api/posts?status=published")
-		if err != nil {
-			t.Fatalf("GET filtered posts request failed: %v", err)
+		req2 := httptest.NewRequest("GET", "/api/posts?status=published", nil)
+		w2 := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w2, req2)
+		
+		if w2.Code != 200 {
+			t.Errorf("Expected status 200 for filtered posts, got %d", w2.Code)
 		}
-		defer resp2.Body.Close()
-
-		if resp2.StatusCode != 200 {
-			t.Errorf("Expected status 200 for filtered posts, got %d", resp2.StatusCode)
-		}
-
+		
 		// Test POST new post
 		postData := `{"title":"Test Post","content":"Test content","author":"Test Author"}`
-		resp3, err := http.Post(baseURL+"/api/posts", "application/json",
-			strings.NewReader(postData))
-
-		if err != nil {
-			t.Fatalf("POST post request failed: %v", err)
-		}
-		defer resp3.Body.Close()
-
-		if resp3.StatusCode != 201 {
-			t.Errorf("Expected status 201 for new post, got %d", resp3.StatusCode)
+		req3 := httptest.NewRequest("POST", "/api/posts", strings.NewReader(postData))
+		req3.Header.Set("Content-Type", "application/json")
+		w3 := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w3, req3)
+		
+		if w3.Code != 201 {
+			t.Errorf("Expected status 201 for new post, got %d", w3.Code)
 		}
 	})
-
+	
 	t.Run("Stats API", func(t *testing.T) {
 		// Test GET all stats
-		resp, err := http.Get(baseURL + "/api/stats")
-		if err != nil {
-			t.Fatalf("GET stats request failed: %v", err)
+		req := httptest.NewRequest("GET", "/api/stats", nil)
+		w := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w, req)
+		
+		if w.Code != 200 {
+			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-
+		
 		var result map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
-
+		
 		if data, ok := result["data"].(map[string]interface{}); !ok {
 			t.Error("Expected stats data in response")
 		} else {
@@ -335,111 +458,79 @@ func TestAPIEndpointsIntegration(t *testing.T) {
 				}
 			}
 		}
-
+		
 		// Test GET specific category
-		resp2, err := http.Get(baseURL + "/api/stats?category=server")
-		if err != nil {
-			t.Fatalf("GET server stats request failed: %v", err)
-		}
-		defer resp2.Body.Close()
-
-		if resp2.StatusCode != 200 {
-			t.Errorf("Expected status 200 for server stats, got %d", resp2.StatusCode)
+		req2 := httptest.NewRequest("GET", "/api/stats?category=server", nil)
+		w2 := httptest.NewRecorder()
+		
+		server.router.ServeHTTP(w2, req2)
+		
+		if w2.Code != 200 {
+			t.Errorf("Expected status 200 for server stats, got %d", w2.Code)
 		}
 	})
 }
 
 func TestDynamicRoutingIntegration(t *testing.T) {
-	// Skip if fixtures don't exist
-	if _, err := os.Stat("fixtures"); os.IsNotExist(err) {
-		t.Skip("Fixtures directory not found, skipping dynamic routing tests")
+	memFS := setupIntegrationMemoryFS()
+	
+	server := &Server{
+		router: mux.NewRouter(),
+		port:   8080,
+		fs:     memFS,
 	}
-
-	// Start server in background
-	server := NewServer("fixtures", 8897) // Use different port for testing
-
-	go func() {
-		if err := server.Start(); err != nil {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-
-	// Wait for server to start
-	time.Sleep(100 * time.Millisecond)
-
-	baseURL := "http://localhost:8897"
-
+	
+	if err := server.setupRoutes(); err != nil {
+		t.Fatalf("Failed to setup routes: %v", err)
+	}
+	
 	testCases := []struct {
 		name         string
 		path         string
 		expectedText string
-		shouldFind   bool
+		expectedStatus int
 	}{
 		{
 			name:         "Blog Post 1",
 			path:         "/blog/1",
 			expectedText: "Welcome to our blog",
-			shouldFind:   true,
+			expectedStatus: 200,
 		},
 		{
 			name:         "Blog Post 2",
 			path:         "/blog/2",
 			expectedText: "Getting started with Redi",
-			shouldFind:   true,
+			expectedStatus: 200,
 		},
 		{
 			name:         "Blog Post 123",
 			path:         "/blog/123",
 			expectedText: "Dynamic Route Example",
-			shouldFind:   true,
+			expectedStatus: 200,
 		},
 		{
 			name:         "Non-existent Blog Post",
 			path:         "/blog/999",
 			expectedText: "404 - Post Not Found",
-			shouldFind:   false,
+			expectedStatus: 404,
 		},
 	}
-
+	
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := http.Get(baseURL + tc.path)
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
+			req := httptest.NewRequest("GET", tc.path, nil)
+			w := httptest.NewRecorder()
+			
+			server.router.ServeHTTP(w, req)
+			
+			if w.Code != tc.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tc.expectedStatus, w.Code)
 			}
-			defer resp.Body.Close()
-
-			if tc.shouldFind {
-				if resp.StatusCode != 200 {
-					t.Errorf("Expected status 200, got %d", resp.StatusCode)
-				}
-			} else {
-				if resp.StatusCode != 404 {
-					t.Errorf("Expected status 404, got %d", resp.StatusCode)
-				}
-			}
-
-			body := make([]byte, 2048)
-			n, _ := resp.Body.Read(body)
-			bodyStr := string(body[:n])
-
-			if !strings.Contains(bodyStr, tc.expectedText) {
-				t.Errorf("Expected response to contain %s, got %s", tc.expectedText, bodyStr)
+			
+			body := w.Body.String()
+			if !strings.Contains(body, tc.expectedText) {
+				t.Errorf("Expected response to contain %s, got %s", tc.expectedText, body)
 			}
 		})
 	}
-}
-
-// Helper function to check if server is running
-func waitForServer(url string, timeout time.Duration) error {
-	start := time.Now()
-	for time.Since(start) < timeout {
-		resp, err := http.Get(url)
-		if err == nil {
-			resp.Body.Close()
-			return nil
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return fmt.Errorf("server did not start within %v", timeout)
 }

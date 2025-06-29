@@ -1,74 +1,140 @@
 {{layout 'base'}}
 
-<script @server>
-var posts = {
-    "1": {
-        id: 1,
-        title: "Welcome to our blog",
-        content: "This is the first post on our test blog. It demonstrates how dynamic routing works with the [id] parameter.",
-        date: "2024-01-15",
-        author: "Admin",
-        tags: ["welcome", "introduction"]
-    },
-    "2": {
-        id: 2,
-        title: "Getting started with Redi",
-        content: "Learn how to use the Redi frontend server. This post covers the basic features and how to set up your own blog.",
-        date: "2024-01-20",
-        author: "Developer",
-        tags: ["tutorial", "redi", "setup"]
-    },
-    "123": {
-        id: 123,
-        title: "Dynamic Route Example",
-        content: "This demonstrates the dynamic routing feature where [id] in the filename becomes a parameter.",
-        date: "2024-01-25",
-        author: "System",
-        tags: ["example", "routing"]
-    }
-};
-
-var postId = req.params.id;
-var post = posts[postId];
-
-if (!post) {
-    res.status(404);
-    res.render({
-        Title: "Post Not Found",
-        error: "Post not found"
-    });
-} else {
-    res.render({
-        Title: post.title,
-        post: post
-    });
-}
-</script>
-
 {{if .error}}
-<div class="blog-post">
-    <h1>404 - Post Not Found</h1>
-    <p>The requested blog post could not be found.</p>
-    <p><a href="/blog">← Back to Blog</a></p>
+<!-- 404 Error Page -->
+<div class="max-w-4xl mx-auto text-center py-16">
+    <div class="bg-white rounded-2xl shadow-lg p-8 mb-8">
+        <div class="mb-6">
+            <svg class="w-24 h-24 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">404 - Post Not Found</h1>
+            <p class="text-xl text-gray-600 mb-8">The requested blog post could not be found.</p>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="/blog" class="bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18"></path>
+                </svg>
+                Back to Blog
+            </a>
+            <a href="/" class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                </svg>
+                Back to Home
+            </a>
+        </div>
+    </div>
 </div>
 {{else}}
-<article class="blog-post">
-    <h1>{{.post.title}}</h1>
-    <div class="blog-meta">
-        By {{.post.author}} on {{.post.date}}
-    </div>
-    <div class="blog-content">
-        <p>{{.post.content}}</p>
-    </div>
-    <div class="blog-tags" style="margin-top: 20px;">
-        <strong>Tags:</strong>
-        {{range .post.tags}}
-        <span style="background: #e9ecef; padding: 2px 8px; margin: 2px; border-radius: 4px;">{{.}}</span>
-        {{end}}
-    </div>
-</article>
+<!-- Blog Post -->
+<div class="max-w-4xl mx-auto">
+    <!-- Breadcrumb -->
+    <nav class="flex items-center space-x-2 text-sm text-gray-500 mb-8">
+        <a href="/" class="hover:text-primary-600 transition-colors">Home</a>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+        </svg>
+        <a href="/blog" class="hover:text-primary-600 transition-colors">Blog</a>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+        </svg>
+        <span class="text-gray-900 font-medium">{{.post.title}}</span>
+    </nav>
 
-<div style="margin-top: 30px;">
-    <a href="/" class="btn">← Back to Home</a>
+    <!-- Blog Post Content -->
+    <article class="bg-white rounded-2xl shadow-lg overflow-hidden mb-8">
+        <!-- Post Header -->
+        <div class="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-8">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">{{.post.title}}</h1>
+            <div class="flex items-center space-x-6 text-primary-100">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                    <span>{{.post.author}}</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <span>{{.post.date}}</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Post Content -->
+        <div class="p-8">
+            <div class="prose prose-lg max-w-none">
+                <p class="text-gray-700 leading-relaxed text-lg">{{.post.content}}</p>
+            </div>
+            
+            <!-- Tags Section -->
+            {{if .post.tags}}
+            <div class="mt-8 pt-8 border-t border-gray-200">
+                <div class="flex items-center flex-wrap gap-2">
+                    <span class="text-gray-700 font-medium flex items-center mr-3">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                        </svg>
+                        Tags:
+                    </span>
+                    {{range .post.tags}}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-800 hover:bg-primary-200 transition-colors cursor-pointer">
+                        {{.}}
+                    </span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </article>
+
+    <!-- Navigation Buttons -->
+    <div class="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <a href="/blog" class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18"></path>
+            </svg>
+            Back to Blog
+        </a>
+        
+        <a href="/" class="bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+            </svg>
+            Back to Home
+        </a>
+    </div>
+
+    <!-- Related Posts Section -->
+    <div class="mt-12 bg-gray-50 rounded-2xl p-8">
+        <h3 class="text-2xl font-bold text-gray-900 mb-6">Related Posts</h3>
+        <div class="grid gap-6 md:grid-cols-2">
+            <div class="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                <h4 class="text-lg font-semibold text-gray-900 mb-2">More Blog Posts</h4>
+                <p class="text-gray-600 mb-4">Discover more interesting articles and insights.</p>
+                <a href="/blog" class="text-primary-600 hover:text-primary-700 font-medium inline-flex items-center">
+                    Explore Blog
+                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
+            </div>
+            
+            <div class="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                <h4 class="text-lg font-semibold text-gray-900 mb-2">Join Our Community</h4>
+                <p class="text-gray-600 mb-4">Connect with other readers and writers.</p>
+                <a href="/users" class="text-primary-600 hover:text-primary-700 font-medium inline-flex items-center">
+                    View Users
+                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </div>
 </div>
 {{end}}

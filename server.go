@@ -74,7 +74,7 @@ func (s *Server) setupRoutes() error {
 
 	for _, route := range routes {
 		handler := handlerManager.GetHandler(route)
-		s.router.HandleFunc(route.Path, handler).Methods("GET", "POST")
+		s.router.HandleFunc(route.Path, handler).Methods("GET", "POST", "PUT", "DELETE")
 		log.Printf("Registered route: %s -> %s", route.Path, route.FilePath)
 	}
 

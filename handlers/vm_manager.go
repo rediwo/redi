@@ -63,11 +63,17 @@ func (vm *VMManager) createModuleLoader(basePath string) func(string) ([]byte, e
 		if filepath.IsAbs(name) {
 			filePath = name
 		} else {
-			// For relative paths, resolve from basePath
-			if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") {
-				filePath = filepath.Join(basePath, name)
+			// Check if name already contains basePath (already resolved by path resolver)
+			if strings.HasPrefix(name, basePath+"/") || name == basePath {
+				// Already resolved path, use as-is
+				filePath = name
 			} else {
-				filePath = filepath.Join(basePath, name)
+				// For relative paths, resolve from basePath
+				if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") {
+					filePath = filepath.Join(basePath, name)
+				} else {
+					filePath = filepath.Join(basePath, name)
+				}
 			}
 		}
 
@@ -134,16 +140,14 @@ func (vm *VMManager) createPathResolver(basePath string) func(string, string) st
 					baseDir = filepath.Dir(base)
 				}
 			} else {
-				// If base is relative, resolve it relative to basePath
-				absBase, err := filepath.Abs(filepath.Join(basePath, base))
-				if err == nil {
-					if info, err := vm.fs.Stat(absBase); err == nil && info.IsDir() {
-						baseDir = absBase
-					} else {
-						baseDir = filepath.Dir(absBase)
-					}
+				// If base is relative, resolve it relative to basePath within the filesystem
+				resolvedBase := filepath.Join(basePath, base)
+				// Don't use filepath.Abs here as it's relative to working directory
+				// We want it relative to the filesystem root
+				if info, err := vm.fs.Stat(resolvedBase); err == nil && info.IsDir() {
+					baseDir = resolvedBase
 				} else {
-					baseDir = filepath.Dir(filepath.Join(basePath, base))
+					baseDir = filepath.Dir(resolvedBase)
 				}
 			}
 		}
@@ -151,12 +155,8 @@ func (vm *VMManager) createPathResolver(basePath string) func(string, string) st
 		// Resolve the module path relative to baseDir
 		resolvedPath := filepath.Join(baseDir, name)
 
-		// Convert to absolute path and clean it
-		if absPath, err := filepath.Abs(resolvedPath); err == nil {
-			return filepath.Clean(absPath)
-		}
-
-		// Fallback to cleaned resolved path
+		// Don't convert to absolute path - keep it relative to filesystem root
+		// Clean it and return
 		return filepath.Clean(resolvedPath)
 	}
 }

@@ -31,7 +31,7 @@ func NewRouteScanner(fs filesystem.FileSystem, routesDir string) *RouteScanner {
 }
 
 func (rs *RouteScanner) ScanRoutes() ([]Route, error) {
-	var routes []Route
+	var allRoutes []Route
 
 	err := rs.fs.WalkDir(rs.routesDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -66,11 +66,16 @@ func (rs *RouteScanner) ScanRoutes() ([]Route, error) {
 		}
 
 		route := rs.createRoute(path, ext)
-		routes = append(routes, route)
+		allRoutes = append(allRoutes, route)
 		return nil
 	})
 	
-	return routes, err
+	if err != nil {
+		return nil, err
+	}
+	
+	// Deduplicate routes - prioritize .js files over .html files for the same path
+	return rs.deduplicateRoutes(allRoutes), nil
 }
 
 func (rs *RouteScanner) createRoute(filePath, ext string) Route {
@@ -125,4 +130,52 @@ func (rs *RouteScanner) createRoute(filePath, ext string) Route {
 		IsDynamic: isDynamic,
 		ParamName: paramName,
 	}
+}
+
+// deduplicateRoutes removes duplicate routes, prioritizing .js files over .html files
+// for the same path pattern. This ensures that when both a .js and .html file exist
+// for the same route, only the JavaScript handler is registered.
+func (rs *RouteScanner) deduplicateRoutes(routes []Route) []Route {
+	// Group routes by path
+	routeMap := make(map[string][]Route)
+	
+	for _, route := range routes {
+		routeMap[route.Path] = append(routeMap[route.Path], route)
+	}
+	
+	var deduplicatedRoutes []Route
+	
+	for _, routeGroup := range routeMap {
+		if len(routeGroup) == 1 {
+			// Only one route for this path, add it
+			deduplicatedRoutes = append(deduplicatedRoutes, routeGroup[0])
+		} else {
+			// Multiple routes for the same path, prioritize by file type
+			// Priority: .js > .html > .md
+			var jsRoute, htmlRoute, mdRoute *Route
+			
+			for i := range routeGroup {
+				route := &routeGroup[i]
+				switch route.FileType {
+				case "js":
+					jsRoute = route
+				case "html":
+					htmlRoute = route
+				case "md":
+					mdRoute = route
+				}
+			}
+			
+			// Choose the highest priority route
+			if jsRoute != nil {
+				deduplicatedRoutes = append(deduplicatedRoutes, *jsRoute)
+			} else if htmlRoute != nil {
+				deduplicatedRoutes = append(deduplicatedRoutes, *htmlRoute)
+			} else if mdRoute != nil {
+				deduplicatedRoutes = append(deduplicatedRoutes, *mdRoute)
+			}
+		}
+	}
+	
+	return deduplicatedRoutes
 }

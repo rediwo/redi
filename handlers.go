@@ -8,9 +8,8 @@ import (
 
 type HandlerManager struct {
 	fs              filesystem.FileSystem
-	markdownHandler *handlers.MarkdownHandler
 	jsHandler       *handlers.JavaScriptHandler
-	htmlHandler     *handlers.HTMLHandler
+	templateHandler *handlers.TemplateHandler
 }
 
 func NewHandlerManager(fs filesystem.FileSystem) *HandlerManager {
@@ -20,9 +19,8 @@ func NewHandlerManager(fs filesystem.FileSystem) *HandlerManager {
 func NewHandlerManagerWithVersion(fs filesystem.FileSystem, version string) *HandlerManager {
 	return &HandlerManager{
 		fs:              fs,
-		markdownHandler: handlers.NewMarkdownHandler(fs),
 		jsHandler:       handlers.NewJavaScriptHandlerWithVersion(fs, version),
-		htmlHandler:     handlers.NewHTMLHandler(fs),
+		templateHandler: handlers.NewTemplateHandler(fs),
 	}
 }
 
@@ -37,15 +35,10 @@ func (hm *HandlerManager) GetHandler(route Route) http.HandlerFunc {
 	}
 	
 	switch route.FileType {
-	case "md":
-		return hm.markdownHandler.Handle(handlerRoute)
 	case "js":
 		return hm.jsHandler.Handle(handlerRoute)
-	case "html":
-		return hm.htmlHandler.Handle(handlerRoute)
 	default:
-		return func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "Unsupported file type", http.StatusInternalServerError)
-		}
+		// All non-.js files are handled as templates (HTML, Markdown, JSON, etc.)
+		return hm.templateHandler.Handle(handlerRoute)
 	}
 }

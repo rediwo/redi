@@ -1,45 +1,12 @@
-var posts = [
-    { 
-        id: 1, 
-        title: "Welcome to our blog", 
-        content: "This is the first post on our test blog.",
-        author: "Admin",
-        status: "published",
-        date: "2024-01-15",
-        tags: ["welcome", "introduction"]
-    },
-    { 
-        id: 2, 
-        title: "Getting started with Redi", 
-        content: "Learn how to use the Redi frontend server.",
-        author: "Developer",
-        status: "published", 
-        date: "2024-01-20",
-        tags: ["tutorial", "redi"]
-    },
-    { 
-        id: 3, 
-        title: "Draft Post", 
-        content: "This is a draft post that hasn't been published yet.",
-        author: "Editor",
-        status: "draft", 
-        date: "2024-01-25",
-        tags: ["draft"]
-    }
-];
+var postsDb = require('../_data/posts');
 
-if (req.method === 'GET') {
+// GET /api/posts
+exports.get = function(req, res, next) {
     var postId = req.query ? req.query.id : null;
     var status = req.query ? req.query.status : null;
     
     if (postId) {
-        var post = null;
-        for (var i = 0; i < posts.length; i++) {
-            if (posts[i].id === parseInt(postId)) {
-                post = posts[i];
-                break;
-            }
-        }
+        var post = postsDb.getById(postId);
         if (post) {
             res.json({ success: true, data: post });
         } else {
@@ -47,27 +14,28 @@ if (req.method === 'GET') {
             res.json({ success: false, message: "Post not found" });
         }
     } else {
-        var filteredPosts = posts;
+        var posts;
         
-        if (status) {
-            filteredPosts = [];
-            for (var i = 0; i < posts.length; i++) {
-                if (posts[i].status === status) {
-                    filteredPosts.push(posts[i]);
-                }
-            }
+        if (status === 'all') {
+            posts = postsDb.getAll(true); // Include unpublished
+        } else if (status) {
+            posts = postsDb.getByStatus(status);
+        } else {
+            posts = postsDb.getAll(); // Only published
         }
         
         res.json({ 
             success: true, 
-            data: filteredPosts,
-            count: filteredPosts.length,
-            filters: { status: status || 'all' },
+            data: posts,
+            count: posts.length,
+            filters: { status: status || 'published' },
             timestamp: new Date().toISOString()
         });
     }
-    
-} else if (req.method === 'POST') {
+};
+
+// POST /api/posts
+exports.post = function(req, res, next) {
     if (req.body) {
         try {
             var postData = JSON.parse(req.body);
@@ -76,33 +44,24 @@ if (req.method === 'GET') {
                 res.status(400);
                 res.json({ success: false, message: "Title and content are required" });
             } else {
+                // Process tags
                 var tags = [];
                 if (postData.tags) {
-                    var tagList = postData.tags.split(',');
-                    for (var i = 0; i < tagList.length; i++) {
-                        var tag = tagList[i].trim();
-                        if (tag) {
-                            tags.push(tag);
+                    if (typeof postData.tags === 'string') {
+                        var tagList = postData.tags.split(',');
+                        for (var i = 0; i < tagList.length; i++) {
+                            var tag = tagList[i].trim();
+                            if (tag) {
+                                tags.push(tag);
+                            }
                         }
+                    } else if (Array.isArray(postData.tags)) {
+                        tags = postData.tags;
                     }
                 }
+                postData.tags = tags;
                 
-                var maxId = 0;
-                for (var i = 0; i < posts.length; i++) {
-                    if (posts[i].id > maxId) maxId = posts[i].id;
-                }
-                
-                var newPost = {
-                    id: maxId + 1,
-                    title: postData.title,
-                    content: postData.content,
-                    author: postData.author || 'Anonymous',
-                    status: postData.status || 'draft',
-                    date: new Date().toISOString().split('T')[0],
-                    tags: tags
-                };
-                
-                posts.push(newPost);
+                var newPost = postsDb.create(postData);
                 
                 res.status(201);
                 res.json({ 
@@ -119,7 +78,74 @@ if (req.method === 'GET') {
         res.status(400);
         res.json({ success: false, message: "Request body required" });
     }
-} else {
-    res.status(405);
-    res.json({ success: false, message: "Method not allowed" });
-}
+};
+
+// PUT /api/posts/{id}
+exports.put = function(req, res, next) {
+    var postId = req.params ? req.params.id : null;
+    
+    if (!postId) {
+        res.status(400);
+        res.json({ success: false, message: "Post ID required" });
+        return;
+    }
+    
+    if (req.body) {
+        try {
+            var postData = JSON.parse(req.body);
+            
+            // Process tags if provided
+            if (postData.tags && typeof postData.tags === 'string') {
+                var tags = [];
+                var tagList = postData.tags.split(',');
+                for (var i = 0; i < tagList.length; i++) {
+                    var tag = tagList[i].trim();
+                    if (tag) {
+                        tags.push(tag);
+                    }
+                }
+                postData.tags = tags;
+            }
+            
+            var updatedPost = postsDb.update(postId, postData);
+            
+            if (updatedPost) {
+                res.json({ 
+                    success: true, 
+                    message: "Post updated successfully",
+                    data: updatedPost 
+                });
+            } else {
+                res.status(404);
+                res.json({ success: false, message: "Post not found" });
+            }
+        } catch (error) {
+            res.status(400);
+            res.json({ success: false, message: "Invalid JSON data" });
+        }
+    } else {
+        res.status(400);
+        res.json({ success: false, message: "Request body required" });
+    }
+};
+
+// DELETE /api/posts/{id}
+exports.delete = function(req, res, next) {
+    var postId = req.params ? req.params.id : null;
+    
+    if (!postId) {
+        res.status(400);
+        res.json({ success: false, message: "Post ID required" });
+        return;
+    }
+    
+    if (postsDb.delete(postId)) {
+        res.json({ 
+            success: true, 
+            message: "Post deleted successfully" 
+        });
+    } else {
+        res.status(404);
+        res.json({ success: false, message: "Post not found" });
+    }
+};

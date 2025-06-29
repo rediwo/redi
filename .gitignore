@@ -45,3 +45,5 @@ redi-app/
 *.app
 *.exe
 build/
+*.log
+*.log.pid

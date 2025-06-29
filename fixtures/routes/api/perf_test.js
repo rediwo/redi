@@ -1,5 +1,5 @@
 // Performance test endpoints for concurrent load testing
-if (req.method === 'GET') {
+exports.get = function(req, res, next) {
     var testType = (req.query.split('type=')[1] || 'fast').split('&')[0];
     var delay = parseInt(req.query.split('delay=')[1]) || 0;
     
@@ -106,11 +106,4 @@ if (req.method === 'GET') {
             timestamp: new Date().toISOString()
         });
     }
-    
-} else {
-    res.status(405);
-    res.json({
-        success: false,
-        message: "Method not allowed"
-    });
-}
+};

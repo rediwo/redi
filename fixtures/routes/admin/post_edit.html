@@ -1,81 +1,230 @@
 {{layout 'admin'}}
 
-<script @server>
-res.render({
-    Title: "Post Management",
-    posts: [
-        { id: 1, title: "Welcome to our blog", status: "published", author: "Admin", date: "2024-01-15" },
-        { id: 2, title: "Getting started with Redi", status: "published", author: "Developer", date: "2024-01-20" },
-        { id: 3, title: "Draft Post", status: "draft", author: "Editor", date: "2024-01-25" }
-    ]
-});
-</script>
-
-<h1>Post Management</h1>
-
-<div class="admin-panel">
-    <h2>Create New Post</h2>
-    <form method="POST" action="/api/posts">
-        <div class="form-group">
-            <label for="title">Title:</label>
-            <input type="text" id="title" name="title" required>
-        </div>
-        <div class="form-group">
-            <label for="content">Content:</label>
-            <textarea id="content" name="content" rows="10" required></textarea>
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-            <div class="form-group">
-                <label for="author">Author:</label>
-                <input type="text" id="author" name="author" required>
+<div x-data="{
+    showCreateForm: false,
+    formData: {
+        title: '',
+        content: '',
+        author: '',
+        status: 'draft',
+        tags: ''
+    },
+    
+    resetForm() {
+        this.formData = {
+            title: '',
+            content: '',
+            author: '',
+            status: 'draft',
+            tags: ''
+        };
+    },
+    
+    async createPost() {
+        try {
+            const response = await fetch('/api/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.formData)
+            });
+            
+            if (response.ok) {
+                this.resetForm();
+                this.showCreateForm = false;
+                location.reload();
+            }
+        } catch (error) {
+            console.error('Error creating post:', error);
+        }
+    },
+    
+    getStatusColor(status) {
+        switch(status) {
+            case 'published': return 'text-green-600 bg-green-100';
+            case 'draft': return 'text-orange-600 bg-orange-100';
+            case 'archived': return 'text-gray-600 bg-gray-100';
+            default: return 'text-gray-600 bg-gray-100';
+        }
+    }
+}">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Post Management</h1>
+                <p class="text-gray-600 mt-2">Create and manage blog posts</p>
             </div>
-            <div class="form-group">
-                <label for="status">Status:</label>
-                <select id="status" name="status" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="tags">Tags (comma separated):</label>
-                <input type="text" id="tags" name="tags" placeholder="tag1, tag2, tag3">
-            </div>
+            <button @click="showCreateForm = !showCreateForm" 
+                    class="bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors inline-flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                Create New Post
+            </button>
         </div>
-        <button type="submit" class="btn">Create Post</button>
-    </form>
-</div>
+    </div>
 
-<div class="admin-panel">
-    <h2>Existing Posts</h2>
-    <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr style="background-color: #f8f9fa;">
-                <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Title</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Author</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Status</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .posts}}
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd;">{{.id}}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">{{.title}}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">{{.author}}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">
-                    <span style="color: {{if eq .status "published"}}green{{else if eq .status "draft"}}orange{{else}}gray{{end}};">{{.status}}</span>
-                </td>
-                <td style="padding: 10px; border: 1px solid #ddd;">{{.date}}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">
-                    <a href="/blog/{{.id}}" class="btn" style="font-size: 12px; padding: 5px 10px; margin-right: 5px; text-decoration: none;">View</a>
-                    <button class="btn" style="font-size: 12px; padding: 5px 10px; margin-right: 5px;">Edit</button>
-                    <button class="btn" style="font-size: 12px; padding: 5px 10px; background-color: #dc3545;">Delete</button>
-                </td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>
+    <!-- Create Post Form -->
+    <div x-show="showCreateForm" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform scale-95"
+         x-transition:enter-end="opacity-100 transform scale-100"
+         class="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8"
+         x-cloak>
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 flex items-center">
+                <svg class="w-6 h-6 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                Create New Post
+            </h2>
+            <button @click="showCreateForm = false; resetForm()" 
+                    class="text-gray-400 hover:text-gray-600 p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form @submit.prevent="createPost()" class="space-y-6">
+            <!-- Title -->
+            <div>
+                <label for="title" class="block text-sm font-medium text-gray-700 mb-2">Post Title</label>
+                <input type="text" id="title" x-model="formData.title" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                       placeholder="Enter an engaging title for your post">
+            </div>
+            
+            <!-- Content -->
+            <div>
+                <label for="content" class="block text-sm font-medium text-gray-700 mb-2">Content</label>
+                <textarea id="content" x-model="formData.content" rows="12" required
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="Write your post content in markdown format..."></textarea>
+            </div>
+            
+            <!-- Post Meta -->
+            <div class="grid md:grid-cols-3 gap-6">
+                <div>
+                    <label for="author" class="block text-sm font-medium text-gray-700 mb-2">Author</label>
+                    <input type="text" id="author" x-model="formData.author" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                           placeholder="Author name">
+                </div>
+                
+                <div>
+                    <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select id="status" x-model="formData.status"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="tags" class="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                    <input type="text" id="tags" x-model="formData.tags"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                           placeholder="tag1, tag2, tag3">
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-3">
+                <button type="button" @click="showCreateForm = false; resetForm()"
+                        class="bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    Create Post
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Existing Posts -->
+    <div class="bg-white rounded-xl shadow-lg border border-gray-200">
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 rounded-t-xl">
+            <h2 class="text-xl font-semibold text-gray-900 flex items-center">
+                <svg class="w-6 h-6 mr-2 text-admin-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Existing Posts
+            </h2>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {{range .posts}}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            #{{.id}}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">{{.title}}</div>
+                            <div class="text-sm text-gray-500">{{if gt (len .title) 50}}{{slice .title 0 50}}...{{else}}{{.title}}{{end}}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-8 w-8">
+                                    <div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+                                        <span class="text-white font-semibold text-xs">{{slice .author 0 1}}</span>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">{{.author}}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span :class="getStatusColor('{{.status}}')" 
+                                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize">
+                                <div class="w-1.5 h-1.5 rounded-full mr-1.5"
+                                     :class="{'bg-green-500': '{{.status}}' === 'published', 'bg-orange-500': '{{.status}}' === 'draft', 'bg-gray-500': '{{.status}}' === 'archived'}"></div>
+                                {{.status}}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{.date}}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            <a href="/blog/{{.id}}" target="_blank"
+                               class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg transition-colors inline-flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                </svg>
+                                View
+                            </a>
+                            <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-lg transition-colors inline-flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                Edit
+                            </button>
+                            <button class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded-lg transition-colors inline-flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>

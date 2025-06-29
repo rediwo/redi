@@ -4,7 +4,7 @@ var validCredentials = [
     { username: "user", password: "user123", role: "user" }
 ];
 
-if (req.method === 'POST') {
+exports.post = function(req, res, next) {
     if (req.body) {
         try {
             var credentials = JSON.parse(req.body);
@@ -58,10 +58,4 @@ if (req.method === 'POST') {
             message: "Request body required" 
         });
     }
-} else {
-    res.status(405);
-    res.json({ 
-        success: false, 
-        message: "Method not allowed. Use POST to login." 
-    });
-}
+};
