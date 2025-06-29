@@ -1,0 +1,242 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          # Windows arm64 builds are not commonly needed
+          - goos: windows
+            goarch: arm64
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Set build variables
+      run: |
+        echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        echo "GOOS=${{ matrix.goos }}" >> $GITHUB_ENV
+        echo "GOARCH=${{ matrix.goarch }}" >> $GITHUB_ENV
+
+    - name: Build redi
+      run: |
+        GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build \
+          -ldflags "-X main.Version=${{ env.VERSION }} -s -w" \
+          -o redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
+          ./cmd/redi
+
+    - name: Build rejs
+      run: |
+        GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build \
+          -ldflags "-X main.Version=${{ env.VERSION }} -s -w" \
+          -o rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
+          ./cmd/rejs
+
+    - name: Create archives
+      run: |
+        # Create platform-specific archive with both redi and rejs executables
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          # For Windows, create ZIP archive with both executables
+          zip redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip \
+            redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.exe \
+            rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.exe
+        else
+          # For Unix-like systems, create tar.gz archive with both executables
+          tar -czf redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz \
+            redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }} \
+            rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}
+        fi
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: |
+          *.zip
+          *.tar.gz
+        retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set release variables
+      run: |
+        # Extract version from the tag reference
+        VERSION="${GITHUB_REF_NAME:-${GITHUB_REF#refs/tags/}}"
+        if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
+          VERSION="dev-$(echo $GITHUB_SHA | cut -c1-7)"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "RELEASE_NAME=Redi $VERSION" >> $GITHUB_ENV
+        echo "Release version: $VERSION"
+        echo "Release name: Redi $VERSION"
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        # Move all archives to the root directory
+        # In v4, artifacts are downloaded to subdirectories named after the artifact
+        find artifacts -name "*.zip" -o -name "*.tar.gz" | xargs -I {} mv {} .
+        
+        # List all files that will be uploaded
+        echo "Release assets:"
+        ls -la *.zip *.tar.gz 2>/dev/null || echo "No archives found"
+
+    - name: Generate checksums
+      run: |
+        # Generate SHA256 checksums for all archives
+        sha256sum *.zip *.tar.gz > checksums.txt 2>/dev/null || touch checksums.txt
+        echo "Generated checksums:"
+        cat checksums.txt
+
+    - name: Generate release notes
+      run: |
+        cat > release_notes.md << 'EOF'
+        ## Redi ${{ env.VERSION }}
+
+        ### Downloads
+
+        Choose the appropriate package for your platform (includes both **redi** web server and **rejs** JavaScript runtime):
+
+        - **Linux AMD64**: `redi-${{ env.VERSION }}-linux-amd64.tar.gz`
+        - **Linux ARM64**: `redi-${{ env.VERSION }}-linux-arm64.tar.gz`
+        - **macOS Intel**: `redi-${{ env.VERSION }}-darwin-amd64.tar.gz`
+        - **macOS Apple Silicon**: `redi-${{ env.VERSION }}-darwin-arm64.tar.gz`
+        - **Windows AMD64**: `redi-${{ env.VERSION }}-windows-amd64.zip`
+
+        ### Quick Start
+
+        1. **Download** the appropriate archive for your platform
+        2. **Extract** both executables:
+           - Linux/macOS: `tar -xzf redi-<version>-<platform>.tar.gz`
+           - Windows: Extract ZIP with your preferred tool
+        3. **Run** directly or move to PATH:
+           - `./redi --version` and `./rejs --version`
+           - Optional: `sudo mv redi rejs /usr/local/bin/` (Linux/macOS)
+
+        ### Usage
+
+        **Redi Web Server:**
+        ```bash
+        redi --root=/path/to/your/site --port=8080
+        ```
+
+        **Rejs JavaScript Runtime:**
+        ```bash
+        rejs script.js
+        rejs --timeout=5000 async-script.js
+        ```
+        ---
+        EOF
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: ${{ env.RELEASE_NAME }}
+        tag_name: ${{ env.VERSION }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(env.VERSION, '-') }}
+        files: |
+          *.zip
+          *.tar.gz
+          checksums.txt
+        generate_release_notes: false
+        fail_on_unmatched_files: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-binaries:
+    name: Test Built Binaries
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: macos-latest 
+            goos: darwin
+            goarch: amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+
+    - name: Extract and set permissions (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        # Extract both binaries from single archive
+        tar -xzf redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+        # Set executable permissions
+        chmod +x redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}
+        chmod +x rejs-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}
+
+    - name: Extract binaries (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        $VERSION = $env:GITHUB_REF -replace 'refs/tags/', ''
+        # Extract both binaries from single archive
+        Expand-Archive -Path "redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.zip" -DestinationPath . -Force
+
+    - name: Test redi binary
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.exe --version
+        else
+          ./redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }} --version
+        fi
+      shell: bash
+
+    - name: Test rejs binary
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./rejs-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.exe --version
+        else
+          ./rejs-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }} --version
+        fi
+      shell: bash
