@@ -255,6 +255,30 @@ func (fsm *FSModule) registerFunctions(runtime *js.Runtime, exports *js.Object) 
 		return js.Undefined()
 	})
 	
+	// rmdirSync (remove directory)
+	exports.Set("rmdirSync", func(call js.FunctionCall) js.Value {
+		if len(call.Arguments) < 1 {
+			panic(runtime.NewTypeError("directory path is required"))
+		}
+		
+		if fsm.fs.IsReadOnly() {
+			panic(runtime.NewGoError(fmt.Errorf("filesystem is read-only")))
+		}
+		
+		dirname := call.Arguments[0].String()
+		// Resolve relative paths from basePath
+		if !filepath.IsAbs(dirname) {
+			dirname = filepath.Join(fsm.basePath, dirname)
+		}
+		
+		err := os.Remove(dirname)
+		if err != nil {
+			panic(runtime.NewGoError(err))
+		}
+		
+		return js.Undefined()
+	})
+	
 	// copyFileSync
 	exports.Set("copyFileSync", func(call js.FunctionCall) js.Value {
 		if len(call.Arguments) < 2 {
@@ -566,6 +590,47 @@ func (fsm *FSModule) registerFunctions(runtime *js.Runtime, exports *js.Object) 
 		
 		go func() {
 			err := os.Remove(filename)
+			
+			// Schedule callback on the event loop
+			fsm.loop.RunOnLoop(func(vm *js.Runtime) {
+				if callFunc, ok := js.AssertFunction(callback); ok {
+					if err != nil {
+						callFunc(js.Undefined(), vm.ToValue(err.Error()))
+					} else {
+						callFunc(js.Undefined(), js.Null())
+					}
+				}
+			})
+		}()
+		
+		return js.Undefined()
+	})
+	
+	// rmdir (async) - callback style
+	exports.Set("rmdir", func(call js.FunctionCall) js.Value {
+		if len(call.Arguments) < 2 {
+			panic(runtime.NewTypeError("directory path and callback are required"))
+		}
+		
+		if fsm.fs.IsReadOnly() {
+			panic(runtime.NewGoError(fmt.Errorf("filesystem is read-only")))
+		}
+		
+		dirname := call.Arguments[0].String()
+		callback := call.Arguments[1]
+		
+		// Resolve relative paths from basePath
+		if !filepath.IsAbs(dirname) {
+			dirname = filepath.Join(fsm.basePath, dirname)
+		}
+		
+		// Execute asynchronously using the event loop
+		if fsm.loop == nil {
+			panic(runtime.NewTypeError("fs async functions require event loop"))
+		}
+		
+		go func() {
+			err := os.Remove(dirname)
 			
 			// Schedule callback on the event loop
 			fsm.loop.RunOnLoop(func(vm *js.Runtime) {

@@ -5,6 +5,7 @@
 
 # Variables
 BINARY_NAME := redi
+REJS_BINARY := rejs
 BUILD_DIR := .
 FIXTURES_DIR := fixtures
 PORT := 8080
@@ -16,6 +17,7 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Build flags
 LDFLAGS := -X main.Version=$(VERSION)
+REJS_LDFLAGS := -X main.Version=$(VERSION)
 
 # Colors for output
 GREEN := \033[32m
@@ -59,17 +61,32 @@ build:
 	@go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/redi
 	@echo "$(GREEN)✅ Build completed: $(BUILD_DIR)/$(BINARY_NAME)$(RESET)"
 
+## build-rejs: Build the rejs JavaScript runtime binary
+.PHONY: build-rejs
+build-rejs:
+	@echo "$(YELLOW)Building $(REJS_BINARY) version $(VERSION)...$(RESET)"
+	@go build -ldflags="$(REJS_LDFLAGS)" -o $(BUILD_DIR)/$(REJS_BINARY) ./cmd/rejs
+	@echo "$(GREEN)✅ Build completed: $(BUILD_DIR)/$(REJS_BINARY)$(RESET)"
+
+## build-all: Build both redi and rejs binaries
+.PHONY: build-all
+build-all: build build-rejs
+	@echo "$(GREEN)✅ All binaries built$(RESET)"
+
 ## clean: Remove built binaries and temporary files
 .PHONY: clean
 clean:
 	@echo "$(YELLOW)Cleaning build artifacts...$(RESET)"
-	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
+	@rm -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(REJS_BINARY)
 	@go clean
 	@echo "$(GREEN)✅ Clean completed$(RESET)"
 
 ## run: Run the server directly with test fixtures (without building binary)
 .PHONY: run
 run:
+	@echo "$(YELLOW)Stopping any existing server on port $(PORT)...$(RESET)"
+	@lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || true
+	@sleep 1
 	@echo "$(YELLOW)Starting redi server...$(RESET)"
 	@echo "$(BLUE)Server available at: http://localhost:$(PORT)$(RESET)"
 	@echo "$(BLUE)Press Ctrl+C to stop$(RESET)"

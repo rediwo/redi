@@ -36,7 +36,15 @@ func init() {
 func initFetchModule(config modules.ModuleConfig) error {
 	if config.EventLoop != nil && config.VM != nil {
 		fetchModule := NewFetchModule(config.EventLoop)
+		// Register as global object
 		fetchModule.RegisterGlobal(config.VM)
+		// Also register as require module
+		config.Registry.RegisterNativeModule("fetch", func(vm *js.Runtime, module *js.Object) {
+			fetchModule.RegisterGlobal(vm)
+			// Return the fetch object for require
+			fetchObj := vm.Get("fetch")
+			module.Set("exports", fetchObj)
+		})
 	}
 	return nil
 }

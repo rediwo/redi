@@ -36,7 +36,9 @@ fixtures/routes/tests/
 
 /redi
 /redi-embedded
+/rejs
 /cmd/redi/redi
+/cmd/rejs/rejs
 
 # Wails build output
 redi-app/
