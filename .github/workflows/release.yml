@@ -52,19 +52,28 @@ jobs:
           -o rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
           ./cmd/rejs
 
+    - name: Build redi-build
+      run: |
+        GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build \
+          -ldflags "-X main.Version=${{ env.VERSION }} -s -w" \
+          -o redi-build-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
+          ./cmd/redi-build
+
     - name: Create archives
       run: |
-        # Create platform-specific archive with both redi and rejs executables
+        # Create platform-specific archive with all three executables
         if [ "${{ matrix.goos }}" = "windows" ]; then
-          # For Windows, create ZIP archive with both executables
+          # For Windows, create ZIP archive with all executables
           zip redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip \
             redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.exe \
-            rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.exe
+            rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.exe \
+            redi-build-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.exe
         else
-          # For Unix-like systems, create tar.gz archive with both executables
+          # For Unix-like systems, create tar.gz archive with all executables
           tar -czf redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz \
             redi-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }} \
-            rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}
+            rejs-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }} \
+            redi-build-${{ env.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}
         fi
 
     - name: Upload build artifacts
@@ -130,7 +139,7 @@ jobs:
 
         ### Downloads
 
-        Choose the appropriate package for your platform (includes both **redi** web server and **rejs** JavaScript runtime):
+        Choose the appropriate package for your platform (includes **redi** web server, **rejs** JavaScript runtime, and **redi-build** tools):
 
         - **Linux AMD64**: `redi-${{ env.VERSION }}-linux-amd64.tar.gz`
         - **Linux ARM64**: `redi-${{ env.VERSION }}-linux-arm64.tar.gz`
@@ -141,12 +150,12 @@ jobs:
         ### Quick Start
 
         1. **Download** the appropriate archive for your platform
-        2. **Extract** both executables:
+        2. **Extract** all executables:
            - Linux/macOS: `tar -xzf redi-<version>-<platform>.tar.gz`
            - Windows: Extract ZIP with your preferred tool
         3. **Run** directly or move to PATH:
-           - `./redi --version` and `./rejs --version`
-           - Optional: `sudo mv redi rejs /usr/local/bin/` (Linux/macOS)
+           - `./redi --version`, `./rejs --version`, and `./redi-build --version`
+           - Optional: `sudo mv redi rejs redi-build /usr/local/bin/` (Linux/macOS)
 
         ### Usage
 
@@ -159,6 +168,12 @@ jobs:
         ```bash
         rejs script.js
         rejs --timeout=5000 async-script.js
+        ```
+
+        **Redi Build Tools:**
+        ```bash
+        redi-build embed --root=mysite --output=myapp
+        redi-build wails --root=mysite --output=myapp --name="My App"
         ```
         ---
         EOF
@@ -208,17 +223,18 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
-        # Extract both binaries from single archive
+        # Extract all binaries from single archive
         tar -xzf redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
         # Set executable permissions
         chmod +x redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}
         chmod +x rejs-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}
+        chmod +x redi-build-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}
 
     - name: Extract binaries (Windows)
       if: matrix.os == 'windows-latest'
       run: |
         $VERSION = $env:GITHUB_REF -replace 'refs/tags/', ''
-        # Extract both binaries from single archive
+        # Extract all binaries from single archive
         Expand-Archive -Path "redi-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.zip" -DestinationPath . -Force
 
     - name: Test redi binary
@@ -238,5 +254,15 @@ jobs:
           ./rejs-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.exe --version
         else
           ./rejs-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }} --version
+        fi
+      shell: bash
+
+    - name: Test redi-build binary
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./redi-build-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }}.exe --version
+        else
+          ./redi-build-$VERSION-${{ matrix.goos }}-${{ matrix.goarch }} --version
         fi
       shell: bash

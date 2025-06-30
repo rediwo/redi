@@ -1,6 +1,6 @@
 # Redi - Modern Web Server & JavaScript Runtime
 
-Redi is a Go-based web development toolkit that provides both a dynamic web server (`redi`) and a Node.js-compatible JavaScript runtime (`rejs`).
+Redi is a Go-based web development toolkit that provides a dynamic web server (`redi`), a Node.js-compatible JavaScript runtime (`rejs`), and build tools (`redi-build`) for creating embedded applications and desktop apps.
 
 ## 🚀 Features
 
@@ -25,23 +25,31 @@ Redi is a Go-based web development toolkit that provides both a dynamic web serv
 - **Command Line**: Run scripts with timeout control
 - **Cross-Platform**: Consistent behavior across all platforms
 
+### Redi Build Tools
+- **Embedded Applications**: Create single-file executables with embedded website
+- **Wails Desktop Apps**: Generate cross-platform desktop applications with webview
+- **Modular Architecture**: Extensible builder system for custom deployment types
+- **Third-party Integration**: Clean APIs for building custom applications
+
 ## 📦 Installation
 
 ### Download Pre-built Binaries
 
-Download the latest release for your platform from the [Releases](https://github.com/rediwo/redi/releases) page. Each archive contains both `redi` and `rejs`.
+Download the latest release for your platform from the [Releases](https://github.com/rediwo/redi/releases) page. Each archive contains `redi`, `rejs`, and `redi-build`.
 
 ```bash
 # Extract the archive
 tar -xzf redi-v1.0.0-linux-amd64.tar.gz
 
-# Move to PATH
+# Move to PATH (extract individual binaries from archive first)
 sudo mv redi-v1.0.0-linux-amd64 /usr/local/bin/redi
 sudo mv rejs-v1.0.0-linux-amd64 /usr/local/bin/rejs
+sudo mv redi-build-v1.0.0-linux-amd64 /usr/local/bin/redi-build
 
 # Verify installation
 redi --version
 rejs --version
+redi-build --version
 ```
 
 ### Build from Source
@@ -51,12 +59,13 @@ rejs --version
 git clone https://github.com/rediwo/redi.git
 cd redi
 
-# Build both tools
+# Build all tools
 make build
 
 # Or build individually
 go build -o redi ./cmd/redi
 go build -o rejs ./cmd/rejs
+go build -o redi-build ./cmd/redi-build
 ```
 
 ## 🎯 Quick Start
@@ -210,6 +219,22 @@ rejs script.js
 rejs --timeout=5000 async-script.js
 ```
 
+### Redi Build Tools
+
+Create embedded applications and desktop apps:
+
+```bash
+# Create embedded executable
+redi-build embed --root=mysite --output=myapp
+
+# Create Wails desktop application
+redi-build wails --root=mysite --output=myapp-desktop --name="My Application"
+
+# Show help for specific command
+redi-build embed --help
+redi-build wails --help
+```
+
 ## 📚 Documentation
 
 ### Redi Web Server
@@ -239,6 +264,23 @@ Use `[param]` syntax for dynamic segments:
 #### CLI Options
 - `--timeout=ms` - Set execution timeout in milliseconds
 - `--version` - Show version information
+
+### Redi Build Tools
+
+#### CLI Commands
+
+**redi-build embed** - Create embedded executables:
+- `--root` - Root directory to embed (required)
+- `--output` - Output executable name (default: "redi-embedded")
+
+**redi-build wails** - Create Wails desktop applications:
+- `--root` - Root directory to embed (required)
+- `--output` - Output directory name (default: "redi-app")
+- `--name` - Application display name (default: "Redi App")
+
+**Global options:**
+- `--version` - Show version information
+- `--help` - Show help information
 
 #### Built-in Modules
 
@@ -271,6 +313,82 @@ var lodash = require('lodash');
 ```
 
 ## 🛠️ Advanced Features
+
+### Building Embedded Applications
+
+Create standalone executables with your website embedded:
+
+```bash
+# Build embedded executable
+redi-build embed --root=mysite --output=myapp
+
+# Run the embedded app
+./myapp --port=8080
+```
+
+The embedded executable includes:
+- Complete website assets and routes
+- Redi server runtime
+- Single file deployment
+- No external dependencies
+
+### Creating Desktop Applications
+
+Generate cross-platform desktop apps using Wails:
+
+```bash
+# Create Wails desktop application
+redi-build wails --root=mysite --output=myapp-desktop --name="My Application"
+
+# Build the desktop app
+cd myapp-desktop/my-application
+wails build
+
+# Or run in development mode
+wails dev
+```
+
+Desktop applications include:
+- Embedded web server
+- Native window with webview
+- Menu system with navigation controls
+- Start/stop server controls
+- Open in external browser option
+
+### Third-Party Integration
+
+Use Redi as a library in your Go applications:
+
+```go
+package main
+
+import (
+    "github.com/rediwo/redi/server"
+    "github.com/rediwo/redi/runtime"
+    "github.com/rediwo/redi/builder"
+)
+
+func main() {
+    // Create and start server
+    config := &server.Config{
+        Root: "mysite",
+        Port: 8080,
+    }
+    
+    launcher := server.NewLauncher()
+    launcher.Start(config)
+    
+    // Execute JavaScript
+    runtime.ExecuteScript("script.js", []string{}, 0, "1.0.0")
+    
+    // Build embedded app
+    embedBuilder := builder.NewEmbedBuilder()
+    embedBuilder.Build(builder.Config{
+        Root:   "mysite",
+        Output: "myapp",
+    })
+}
+```
 
 ### Background Mode & Process Management
 
@@ -417,6 +535,10 @@ make test-api           # API endpoint tests only
 # Manual testing with rejs runtime
 ./rejs fixtures/routes/tests/process_test.js
 ./rejs --timeout=10000 fixtures/routes/tests/fetch_test.js
+
+# Test build tools
+redi-build embed --root=fixtures --output=test-embedded
+redi-build wails --help
 ```
 
 ### Test Coverage
@@ -429,6 +551,78 @@ Redi includes extensive testing for:
 - ✅ **Template System**: Layout processing, data binding, error handling
 - ✅ **Cross-Platform**: Windows, Linux, macOS compatibility
 - ✅ **Built-in Modules**: fs, path, process, fetch, child_process
+
+## 🏗️ Architecture
+
+Redi is built with a modular architecture for easy extension and third-party integration:
+
+### Package Structure
+
+```
+redi/
+├── cmd/                    # Command-line tools
+│   ├── redi/              # Web server CLI
+│   ├── rejs/              # JavaScript runtime CLI  
+│   └── redi-build/        # Build tools CLI
+├── server/                # Server management
+│   ├── config.go          # Configuration types
+│   ├── factory.go         # Server factory
+│   ├── launcher.go        # Startup logic
+│   └── platform_*.go     # Platform-specific code
+├── runtime/               # JavaScript execution
+│   ├── config.go          # Runtime configuration
+│   ├── executor.go        # JavaScript executor
+│   └── version.go         # Version management
+├── builder/               # Build tools
+│   ├── types.go           # Builder interfaces
+│   ├── embed.go           # Embedded app builder
+│   └── wails.go           # Wails app builder
+├── handlers/              # Request handlers
+├── modules/               # JavaScript modules
+├── filesystem/            # File system abstractions
+└── fixtures/              # Test website
+```
+
+### Design Principles
+
+- **Modularity**: Each package has a single responsibility
+- **Extensibility**: Clean interfaces for custom builders and handlers
+- **Third-party Friendly**: Simple APIs for integration
+- **Platform Support**: Consistent behavior across operating systems
+- **No Dependencies**: Embedded applications require no external dependencies
+
+### Core APIs
+
+**Server Management:**
+```go
+// Create and configure server
+config := &server.Config{Root: "site", Port: 8080}
+launcher := server.NewLauncher()
+launcher.Start(config)
+```
+
+**JavaScript Execution:**
+```go
+// Execute JavaScript with runtime
+config, _ := runtime.NewConfig("script.js")
+executor := runtime.NewExecutor()
+exitCode, err := executor.Execute(config)
+```
+
+**Building Applications:**
+```go
+// Build embedded executable
+embedBuilder := builder.NewEmbedBuilder()
+err := embedBuilder.Build(builder.Config{
+    Root: "site", Output: "app"
+})
+
+// Build desktop application  
+wailsBuilder := builder.NewWailsBuilder()
+err := wailsBuilder.Build(builder.Config{
+    Root: "site", Output: "app", AppName: "My App"
+})
+```
 
 ## 🤝 Contributing
 

@@ -6,6 +6,7 @@
 # Variables
 BINARY_NAME := redi
 REJS_BINARY := rejs
+BUILD_BINARY := redi-build
 BUILD_DIR := .
 FIXTURES_DIR := fixtures
 PORT := 8080
@@ -18,6 +19,7 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # Build flags
 LDFLAGS := -X main.Version=$(VERSION)
 REJS_LDFLAGS := -X main.Version=$(VERSION)
+BUILD_LDFLAGS := -X main.Version=$(VERSION)
 
 # Colors for output
 GREEN := \033[32m
@@ -32,6 +34,7 @@ help:
 	@echo "\033[34mRedi Frontend Server - Available Commands\033[0m"
 	@echo "========================================"
 	@echo "\033[32mbuild\033[0m          Build the redi binary"
+	@echo "\033[32mbuild-all\033[0m      Build all binaries (redi, rejs, redi-build)"
 	@echo "\033[32mrun\033[0m            Run the server directly with test fixtures"
 	@echo "\033[32mstart\033[0m          Build and run the server with test fixtures"
 	@echo "\033[32mtest\033[0m           Run all tests"
@@ -68,16 +71,23 @@ build-rejs:
 	@go build -ldflags="$(REJS_LDFLAGS)" -o $(BUILD_DIR)/$(REJS_BINARY) ./cmd/rejs
 	@echo "$(GREEN)✅ Build completed: $(BUILD_DIR)/$(REJS_BINARY)$(RESET)"
 
-## build-all: Build both redi and rejs binaries
+## build-redi-build: Build the redi-build tool binary
+.PHONY: build-redi-build
+build-redi-build:
+	@echo "$(YELLOW)Building $(BUILD_BINARY) version $(VERSION)...$(RESET)"
+	@go build -ldflags="$(BUILD_LDFLAGS)" -o $(BUILD_DIR)/$(BUILD_BINARY) ./cmd/redi-build
+	@echo "$(GREEN)✅ Build completed: $(BUILD_DIR)/$(BUILD_BINARY)$(RESET)"
+
+## build-all: Build all binaries (redi, rejs, redi-build)
 .PHONY: build-all
-build-all: build build-rejs
+build-all: build build-rejs build-redi-build
 	@echo "$(GREEN)✅ All binaries built$(RESET)"
 
 ## clean: Remove built binaries and temporary files
 .PHONY: clean
 clean:
 	@echo "$(YELLOW)Cleaning build artifacts...$(RESET)"
-	@rm -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(REJS_BINARY)
+	@rm -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(REJS_BINARY) $(BUILD_DIR)/$(BUILD_BINARY)
 	@go clean
 	@echo "$(GREEN)✅ Clean completed$(RESET)"
 
@@ -172,12 +182,14 @@ deps:
 	@go mod tidy
 	@echo "$(GREEN)✅ Dependencies updated$(RESET)"
 
-## install: Install the binary to GOPATH/bin
+## install: Install all binaries to GOPATH/bin
 .PHONY: install
 install:
-	@echo "$(YELLOW)Installing $(BINARY_NAME) version $(VERSION)...$(RESET)"
+	@echo "$(YELLOW)Installing all binaries version $(VERSION)...$(RESET)"
 	@go install -ldflags="$(LDFLAGS)" ./cmd/redi
-	@echo "$(GREEN)✅ $(BINARY_NAME) installed to GOPATH/bin$(RESET)"
+	@go install -ldflags="$(REJS_LDFLAGS)" ./cmd/rejs
+	@go install -ldflags="$(BUILD_LDFLAGS)" ./cmd/redi-build
+	@echo "$(GREEN)✅ All binaries installed to GOPATH/bin$(RESET)"
 
 ## dev: Development mode - build and run with file watching (requires entr or similar)
 .PHONY: dev
@@ -197,12 +209,14 @@ dev:
 check: fmt vet test
 	@echo "$(GREEN)✅ All checks passed$(RESET)"
 
-## release: Build release version with optimizations
+## release: Build release version with optimizations for all binaries
 .PHONY: release
 release: clean
 	@echo "$(YELLOW)Building release version $(VERSION)...$(RESET)"
 	@CGO_ENABLED=0 go build -ldflags="-w -s $(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/redi
-	@echo "$(GREEN)✅ Release build completed$(RESET)"
+	@CGO_ENABLED=0 go build -ldflags="-w -s $(REJS_LDFLAGS)" -o $(BUILD_DIR)/$(REJS_BINARY) ./cmd/rejs
+	@CGO_ENABLED=0 go build -ldflags="-w -s $(BUILD_LDFLAGS)" -o $(BUILD_DIR)/$(BUILD_BINARY) ./cmd/redi-build
+	@echo "$(GREEN)✅ Release build completed for all binaries$(RESET)"
 
 ## docker-build: Build Docker image (requires Dockerfile)
 .PHONY: docker-build
@@ -260,9 +274,14 @@ $(BINARY_NAME): cmd/redi/*.go *.go handlers/*.go modules/**/*.go
 ## version: Show version information
 .PHONY: version
 version:
-	@echo "$(BLUE)redi version $(VERSION)$(RESET)"
+	@echo "$(BLUE)Redi Toolkit version $(VERSION)$(RESET)"
 	@echo "Build date: $(BUILD_DATE)"
 	@echo "Git commit: $(GIT_COMMIT)"
+	@echo ""
+	@echo "$(YELLOW)Available binaries:$(RESET)"
+	@echo "  - redi (Web Server)"
+	@echo "  - rejs (JavaScript Runtime)"
+	@echo "  - redi-build (Build Tools)"
 
 .PHONY: all start
-all: clean fmt vet test build
+all: clean fmt vet test build-all
