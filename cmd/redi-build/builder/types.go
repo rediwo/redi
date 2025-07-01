@@ -4,10 +4,12 @@ import "os"
 
 // Config represents build configuration
 type Config struct {
-	Root     string
-	Output   string
-	AppName  string
-	Platform string
+	Root        string
+	Output      string
+	AppName     string
+	Platform    string
+	Extensions  []string
+	ConfigFile  string
 }
 
 // Builder interface for different build types

@@ -1,0 +1,35 @@
+package main
+
+import (
+	"embed"
+	"flag"
+	"io/fs"
+	"log"
+	
+	"github.com/rediwo/redi"
+{{range .Extensions}}
+	_ "{{.}}"
+{{- end}}
+)
+
+//go:embed all:{{.RootDir}}
+var embeddedFS embed.FS
+
+func main() {
+	var port int
+	flag.IntVar(&port, "port", 8080, "Port to serve on")
+	flag.Parse()
+
+	// Create a sub-filesystem starting from the root directory
+	rootFS, err := fs.Sub(embeddedFS, "{{.RootDir}}")
+	if err != nil {
+		log.Fatalf("Failed to create sub-filesystem: %v", err)
+	}
+
+	server := redi.NewServerWithFS(rootFS, port)
+	log.Printf("Starting embedded redi server on port %d", port)
+
+	if err := server.Start(); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
+}

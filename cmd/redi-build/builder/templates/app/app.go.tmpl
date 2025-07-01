@@ -1,0 +1,140 @@
+package main
+
+import (
+	"context"
+	"embed"
+	"fmt"
+	"io/fs"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+	
+	"github.com/rediwo/redi"
+{{range .Extensions}}
+	_ "{{.}}"
+{{- end}}
+)
+
+//go:embed all:embed/{{.RootDir}}
+var embeddedFS embed.FS
+
+// App struct
+type App struct {
+	ctx    context.Context
+	server *redi.Server
+	mu     sync.Mutex
+	port   int
+}
+
+// NewApp creates a new App application struct
+func NewApp() *App {
+	return &App{
+		port: 8080,
+	}
+}
+
+// OnStartup is called when the app starts up
+func (a *App) OnStartup(ctx context.Context) {
+	a.ctx = ctx
+	a.startServer()
+}
+
+// OnShutdown is called when the app is shutting down
+func (a *App) OnShutdown(ctx context.Context) {
+	a.stopServer()
+}
+
+// StartServer starts the embedded server
+func (a *App) StartServer() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	
+	if a.server != nil {
+		return fmt.Sprintf("Server already running on port %d", a.port)
+	}
+	
+	a.startServer()
+	return fmt.Sprintf("Server started on port %d", a.port)
+}
+
+// StopServer stops the embedded server
+func (a *App) StopServer() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	
+	if a.server == nil {
+		return "Server not running"
+	}
+	
+	a.stopServer()
+	return "Server stopped"
+}
+
+// GetServerStatus returns the current server status
+func (a *App) GetServerStatus() map[string]interface{} {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	
+	status := map[string]interface{}{
+		"running": a.server != nil,
+		"port":    a.port,
+		"url":     fmt.Sprintf("http://localhost:%d", a.port),
+	}
+	
+	return status
+}
+
+// OpenServer opens the server URL in the default browser
+func (a *App) OpenServer() string {
+	url := fmt.Sprintf("http://localhost:%d", a.port)
+	return url
+}
+
+func (a *App) startServer() {
+	// Create a sub-filesystem starting from the root directory
+	rootFS, err := fs.Sub(embeddedFS, "embed/{{.RootDir}}")
+	if err != nil {
+		log.Printf("Failed to create sub-filesystem: %v", err)
+		return
+	}
+
+	// Find available port
+	for port := a.port; port < a.port+100; port++ {
+		if isPortAvailable(port) {
+			a.port = port
+			break
+		}
+	}
+
+	a.server = redi.NewServerWithFS(rootFS, a.port)
+	
+	go func() {
+		log.Printf("Starting embedded redi server on port %d", a.port)
+		if err := a.server.Start(); err != nil {
+			log.Printf("Server failed to start: %v", err)
+			a.mu.Lock()
+			a.server = nil
+			a.mu.Unlock()
+		}
+	}()
+	
+	// Wait a moment for server to start
+	time.Sleep(100 * time.Millisecond)
+}
+
+func (a *App) stopServer() {
+	if a.server != nil {
+		a.server.Stop()
+		a.server = nil
+	}
+}
+
+func isPortAvailable(port int) bool {
+	conn, err := http.Get(fmt.Sprintf("http://localhost:%d", port))
+	if err != nil {
+		return true // Port is available
+	}
+	conn.Body.Close()
+	return false // Port is busy
+}

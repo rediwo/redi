@@ -1,0 +1,21 @@
+# Makefile for {{.ProjectName}}
+
+BINARY_NAME := {{.BinaryName}}
+VERSION := $(shell git describe --tags --exact-match 2>/dev/null || git describe --tags --always 2>/dev/null || echo "dev")
+LDFLAGS := -X main.Version=$(VERSION)
+
+.PHONY: build run clean
+
+build:
+	go build -ldflags="$(LDFLAGS)" -o bin/$(BINARY_NAME) .
+
+run: build
+	./bin/$(BINARY_NAME) --port=8080
+
+clean:
+	rm -rf bin/
+
+install: build
+	sudo cp bin/$(BINARY_NAME) /usr/local/bin/
+
+.DEFAULT_GOAL := build

@@ -26,9 +26,11 @@ Redi is a Go-based web development toolkit that provides a dynamic web server (`
 - **Cross-Platform**: Consistent behavior across all platforms
 
 ### Redi Build Tools
-- **Embedded Applications**: Create single-file executables with embedded website
-- **Wails Desktop Apps**: Generate cross-platform desktop applications with webview
-- **Modular Architecture**: Extensible builder system for custom deployment types
+- **CLI Applications**: Generate CLI server projects based on redi template
+- **Embedded Applications**: Create embedded executable projects with website bundled
+- **Desktop Applications**: Generate cross-platform Wails desktop apps with webview
+- **Extension System**: Support for extension modules with auto-expansion
+- **Template-based Generation**: Source code projects with build automation
 - **Third-party Integration**: Clean APIs for building custom applications
 
 ## 📦 Installation
@@ -221,18 +223,31 @@ rejs --timeout=5000 async-script.js
 
 ### Redi Build Tools
 
-Create embedded applications and desktop apps:
+Create CLI applications, embedded projects, and desktop apps:
 
 ```bash
-# Create embedded executable
+# Create CLI application project (based on redi server)
+redi-build cli --root=mysite --output=mycli
+
+# Create embedded executable project  
 redi-build embed --root=mysite --output=myapp
 
-# Create Wails desktop application
-redi-build wails --root=mysite --output=myapp-desktop --name="My Application"
+# Create Wails desktop application project
+redi-build app --root=mysite --output=myapp-desktop --name="My Application"
+
+# Use extensions (auto-expands single words to github.com/rediwo/redi-xxx)
+redi-build embed --root=mysite --output=myapp --ext=orm,auth,cache
+
+# Use third-party extensions with full URLs
+redi-build cli --root=mysite --output=mycli --ext=github.com/example/custom-module
+
+# Use YAML configuration file
+redi-build embed --config=build.yaml
 
 # Show help for specific command
-redi-build embed --help
-redi-build wails --help
+redi-build cli --help
+redi-build embed --help  
+redi-build app --help
 ```
 
 ## 📚 Documentation
@@ -269,16 +284,22 @@ Use `[param]` syntax for dynamic segments:
 
 #### CLI Commands
 
-**redi-build embed** - Create embedded executables:
-- `--root` - Root directory to embed (required)
-- `--output` - Output executable name (default: "redi-embedded")
+**redi-build cli** - Create CLI application projects:
+- `--root` - Root directory to include (required)
+- `--output` - Output directory name (default: "redi-cli")
 
-**redi-build wails** - Create Wails desktop applications:
+**redi-build embed** - Create embedded executable projects:
+- `--root` - Root directory to embed (required)
+- `--output` - Output directory name (default: "redi-embedded")
+
+**redi-build app** - Create Wails desktop application projects:
 - `--root` - Root directory to embed (required)
 - `--output` - Output directory name (default: "redi-app")
 - `--name` - Application display name (default: "Redi App")
 
-**Global options:**
+**Global options for all commands:**
+- `--ext` - Extension modules (comma-separated, single words auto-expand to github.com/rediwo/redi-xxx)
+- `--config` - Configuration file (YAML format)
 - `--version` - Show version information
 - `--help` - Show help information
 
@@ -312,36 +333,229 @@ var math = require('./lib/math.js');
 var lodash = require('lodash');
 ```
 
+## 🔧 Build Tools Reference
+
+### Project Types
+
+#### CLI Applications (`redi-build cli`)
+
+Generate standalone CLI server applications based on the redi template:
+
+```bash
+# Basic CLI project
+redi-build cli --root=mysite --output=my-server
+
+# CLI with extensions
+redi-build cli --root=mysite --output=my-server --ext=orm,auth
+```
+
+Generated project structure:
+```
+my-server/
+├── main.go           # CLI application entry point
+├── go.mod           # Go module with dependencies
+├── Makefile         # Build automation
+├── bin/             # Compiled binaries
+└── mysite/          # Your website files
+```
+
+#### Embedded Applications (`redi-build embed`)
+
+Create embedded executable projects with website bundled:
+
+```bash
+# Basic embedded project
+redi-build embed --root=mysite --output=my-app
+
+# Embedded with extensions
+redi-build embed --root=mysite --output=my-app --ext=cache,store
+```
+
+Generated project structure:
+```
+my-app/
+├── main.go           # Embedded application with go:embed
+├── go.mod           # Go module with dependencies  
+├── Makefile         # Build automation
+├── bin/             # Compiled binaries
+└── mysite/          # Your website files (embedded)
+```
+
+#### Desktop Applications (`redi-build app`)
+
+Generate Wails desktop applications with native UI:
+
+```bash
+# Basic desktop app
+redi-build app --root=mysite --output=my-desktop-app --name="My App"
+
+# Desktop app with extensions
+redi-build app --root=mysite --output=my-desktop-app --name="My App" --ext=ui,theme
+```
+
+Generated project structure:
+```
+my-desktop-app/
+├── main.go           # Wails application entry point
+├── app.go           # Application logic and server management
+├── go.mod           # Go module with Wails dependencies
+├── frontend/        # Frontend assets
+├── embed/           # Embedded website files
+└── build/           # Built desktop application
+```
+
+### Extension System
+
+#### Official Extensions (Auto-expansion)
+
+Single words automatically expand to official redi extensions:
+
+```bash
+# These are equivalent:
+--ext=orm,auth,cache
+--ext=github.com/rediwo/redi-orm,github.com/rediwo/redi-auth,github.com/rediwo/redi-cache
+```
+
+Common official extensions:
+- `orm` - Database ORM layer
+- `auth` - Authentication and authorization
+- `cache` - Caching middleware
+- `store` - Key-value storage
+- `session` - Session management
+- `websocket` - WebSocket support
+- `queue` - Background job processing
+
+#### Third-party Extensions
+
+Use full URLs for third-party extensions:
+
+```bash
+redi-build cli --root=mysite --ext=github.com/example/custom-auth,github.com/company/logging
+```
+
+#### Extension Usage
+
+Extensions use the `import _` pattern for self-registration:
+
+```go
+package main
+
+import (
+    "github.com/rediwo/redi/runtime"
+    "github.com/rediwo/redi/server"
+    
+    // Extensions auto-register via init() functions
+    _ "github.com/rediwo/redi-orm"
+    _ "github.com/rediwo/redi-auth"
+)
+```
+
+### Configuration Files
+
+Use YAML configuration files to avoid repetitive command-line arguments:
+
+**build.yaml:**
+```yaml
+# Common settings
+root: mysite
+extensions:
+  - orm
+  - auth
+  - github.com/example/custom
+
+# Command-specific settings
+cli:
+  output: my-cli-server
+  
+embed:
+  output: my-embedded-app
+  
+app:
+  output: my-desktop-app
+  name: "My Application"
+```
+
+Usage:
+```bash
+redi-build cli --config=build.yaml
+redi-build embed --config=build.yaml  
+redi-build app --config=build.yaml
+```
+
+### Build Process
+
+All generated projects include:
+
+1. **Source Code Generation**: Templates filled with your configuration
+2. **Dependency Management**: Proper go.mod with required dependencies  
+3. **Build Automation**: Makefile with common tasks
+4. **Auto-compilation**: Attempts to build the project automatically
+
+#### Build Commands
+
+Each generated project supports standard build commands:
+
+```bash
+# Build the project
+make build
+
+# Run the project (builds first if needed)
+make run
+
+# Clean build artifacts
+make clean
+
+# Install to system PATH
+make install
+```
+
+#### Manual Build Instructions
+
+If auto-compilation fails, projects include helpful instructions:
+
+```bash
+# For CLI and embedded projects
+cd my-project
+go mod tidy
+make build
+
+# For desktop applications  
+cd my-desktop-app
+go mod tidy
+wails build
+```
+
 ## 🛠️ Advanced Features
 
 ### Building Embedded Applications
 
-Create standalone executables with your website embedded:
+Create embedded executable projects with your website bundled:
 
 ```bash
-# Build embedded executable
+# Build embedded executable project
 redi-build embed --root=mysite --output=myapp
 
-# Run the embedded app
-./myapp --port=8080
+# Build and run the embedded app
+cd myapp && make build
+./bin/myapp --port=8080
 ```
 
-The embedded executable includes:
+The embedded project includes:
 - Complete website assets and routes
-- Redi server runtime
-- Single file deployment
-- No external dependencies
+- Redi server runtime  
+- Source code and Makefile for customization
+- Single executable after building
 
 ### Creating Desktop Applications
 
 Generate cross-platform desktop apps using Wails:
 
 ```bash
-# Create Wails desktop application
-redi-build wails --root=mysite --output=myapp-desktop --name="My Application"
+# Create Wails desktop application project
+redi-build app --root=mysite --output=myapp-desktop --name="My Application"
 
 # Build the desktop app
-cd myapp-desktop/my-application
+cd myapp-desktop
 wails build
 
 # Or run in development mode
@@ -365,27 +579,46 @@ package main
 import (
     "github.com/rediwo/redi/server"
     "github.com/rediwo/redi/runtime"
-    "github.com/rediwo/redi/builder"
+    "github.com/rediwo/redi/cmd/redi-build/builder"
 )
 
 func main() {
     // Create and start server
     config := &server.Config{
-        Root: "mysite",
-        Port: 8080,
+        Root:    "mysite",
+        Port:    8080,
+        Version: "1.0.0",
     }
     
     launcher := server.NewLauncher()
     launcher.Start(config)
     
     // Execute JavaScript
-    runtime.ExecuteScript("script.js", []string{}, 0, "1.0.0")
+    jsConfig, _ := runtime.NewConfig("script.js")
+    executor := runtime.NewExecutor()
+    executor.Execute(jsConfig)
     
-    // Build embedded app
+    // Build projects
+    cliBuilder := builder.NewCliBuilder()
+    cliBuilder.Build(builder.Config{
+        Root:       "mysite",
+        Output:     "mycli",
+        Extensions: []string{"orm", "auth"},
+    })
+    
     embedBuilder := builder.NewEmbedBuilder()
     embedBuilder.Build(builder.Config{
-        Root:   "mysite",
-        Output: "myapp",
+        Root:       "mysite", 
+        Output:     "myapp",
+        Extensions: []string{"cache"},
+    })
+    
+    appBuilder := builder.NewAppBuilder()
+    appBuilder.Build(builder.Config{
+        Root:       "mysite",
+        Output:     "mydesktop",
+        AppName:    "My App",
+        Extensions: []string{"ui"},
     })
 }
 ```
@@ -537,8 +770,9 @@ make test-api           # API endpoint tests only
 ./rejs --timeout=10000 fixtures/routes/tests/fetch_test.js
 
 # Test build tools
+redi-build cli --root=fixtures --output=test-cli
 redi-build embed --root=fixtures --output=test-embedded
-redi-build wails --help
+redi-build app --root=fixtures --output=test-app --name="Test App"
 ```
 
 ### Test Coverage
@@ -549,6 +783,8 @@ Redi includes extensive testing for:
 - ✅ **Dynamic Routing**: Parameter extraction, URL patterns
 - ✅ **JavaScript Engine**: Module system, require paths, session management
 - ✅ **Template System**: Layout processing, data binding, error handling
+- ✅ **Build Tools**: CLI, embedded, and desktop app generation
+- ✅ **Extension System**: Module auto-expansion and integration
 - ✅ **Cross-Platform**: Windows, Linux, macOS compatibility
 - ✅ **Built-in Modules**: fs, path, process, fetch, child_process
 
@@ -564,6 +800,14 @@ redi/
 │   ├── redi/              # Web server CLI
 │   ├── rejs/              # JavaScript runtime CLI  
 │   └── redi-build/        # Build tools CLI
+│       ├── main.go        # Build tool entry point
+│       └── builder/       # Builder implementations
+│           ├── types.go   # Builder interfaces
+│           ├── cli.go     # CLI project builder
+│           ├── embed.go   # Embedded app builder
+│           ├── app.go     # Desktop app builder
+│           ├── templates/ # Embedded templates
+│           └── utils.go   # Utility functions
 ├── server/                # Server management
 │   ├── config.go          # Configuration types
 │   ├── factory.go         # Server factory
@@ -573,12 +817,12 @@ redi/
 │   ├── config.go          # Runtime configuration
 │   ├── executor.go        # JavaScript executor
 │   └── version.go         # Version management
-├── builder/               # Build tools
-│   ├── types.go           # Builder interfaces
-│   ├── embed.go           # Embedded app builder
-│   └── wails.go           # Wails app builder
 ├── handlers/              # Request handlers
 ├── modules/               # JavaScript modules
+│   ├── console/           # Console output module
+│   ├── fs/                # File system module
+│   ├── process/           # Process module
+│   └── fetch/             # HTTP client module
 ├── filesystem/            # File system abstractions
 └── fixtures/              # Test website
 ```
@@ -596,7 +840,11 @@ redi/
 **Server Management:**
 ```go
 // Create and configure server
-config := &server.Config{Root: "site", Port: 8080}
+config := &server.Config{
+    Root:    "site", 
+    Port:    8080,
+    Version: "1.0.0",
+}
 launcher := server.NewLauncher()
 launcher.Start(config)
 ```
@@ -611,16 +859,25 @@ exitCode, err := executor.Execute(config)
 
 **Building Applications:**
 ```go
-// Build embedded executable
+// Import the builder package
+import "github.com/rediwo/redi/cmd/redi-build/builder"
+
+// Build CLI application
+cliBuilder := builder.NewCliBuilder()
+err := cliBuilder.Build(builder.Config{
+    Root: "site", Output: "mycli", Extensions: []string{"orm"}
+})
+
+// Build embedded executable project
 embedBuilder := builder.NewEmbedBuilder()
 err := embedBuilder.Build(builder.Config{
-    Root: "site", Output: "app"
+    Root: "site", Output: "myapp", Extensions: []string{"cache"}
 })
 
 // Build desktop application  
-wailsBuilder := builder.NewWailsBuilder()
-err := wailsBuilder.Build(builder.Config{
-    Root: "site", Output: "app", AppName: "My App"
+appBuilder := builder.NewAppBuilder()
+err := appBuilder.Build(builder.Config{
+    Root: "site", Output: "mydesktop", AppName: "My App"
 })
 ```
 

@@ -1,0 +1,142 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/menu"
+	"github.com/wailsapp/wails/v2/pkg/menu/keys"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+func main() {
+	// Create an instance of the app structure
+	app := NewApp()
+
+	// Create menu
+	appMenu := menu.NewMenu()
+	navigationMenu := appMenu.AddSubmenu("Navigation")
+	
+	navigationMenu.AddText("Back", keys.CmdOrCtrl("left"), func(_ *menu.CallbackData) {
+		runtime.WindowExecJS(app.ctx, "history.back()")
+	})
+	
+	navigationMenu.AddText("Forward", keys.CmdOrCtrl("right"), func(_ *menu.CallbackData) {
+		runtime.WindowExecJS(app.ctx, "history.forward()")
+	})
+	
+	navigationMenu.AddSeparator()
+	
+	navigationMenu.AddText("Refresh", keys.CmdOrCtrl("r"), func(_ *menu.CallbackData) {
+		runtime.WindowReload(app.ctx)
+	})
+	
+	navigationMenu.AddSeparator()
+	
+	navigationMenu.AddText("Home", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
+		runtime.WindowExecJS(app.ctx, "window.location.href = '/'")
+	})
+
+	// Server control menu
+	serverMenu := appMenu.AddSubmenu("Server")
+	
+	serverMenu.AddText("Start Server", nil, func(_ *menu.CallbackData) {
+		result := app.StartServer()
+		runtime.LogInfo(app.ctx, result)
+	})
+	
+	serverMenu.AddText("Stop Server", nil, func(_ *menu.CallbackData) {
+		result := app.StopServer()
+		runtime.LogInfo(app.ctx, result)
+	})
+	
+	serverMenu.AddSeparator()
+	
+	serverMenu.AddText("Open in Browser", keys.CmdOrCtrl("o"), func(_ *menu.CallbackData) {
+		status := app.GetServerStatus()
+		if status["running"].(bool) {
+			url := status["url"].(string)
+			runtime.BrowserOpenURL(app.ctx, url)
+		}
+	})
+
+	// Create application with options
+	err := wails.Run(&options.App{
+		Title:  "{{.AppName}}",
+		Width:  1024,
+		Height: 768,
+		Menu:   appMenu,
+		AssetServer: &assetserver.Options{
+			Handler: NewAssetHandler(app),
+		},
+		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		OnStartup:        app.OnStartup,
+		OnShutdown:       app.OnShutdown,
+	})
+
+	if err != nil {
+		println("Error:", err.Error())
+	}
+}
+
+// NewAssetHandler creates a custom asset handler that proxies to the embedded Redi server
+func NewAssetHandler(app *App) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Wait for server to be ready
+		status := app.GetServerStatus()
+		if !status["running"].(bool) {
+			http.Error(w, "Server not ready", http.StatusServiceUnavailable)
+			return
+		}
+
+		// Create proxy request to local server
+		port := status["port"].(int)
+		proxyURL := fmt.Sprintf("http://localhost:%d%s", port, r.URL.Path)
+		
+		// Handle query parameters
+		if r.URL.RawQuery != "" {
+			proxyURL += "?" + r.URL.RawQuery
+		}
+
+		// Create new request
+		proxyReq, err := http.NewRequestWithContext(context.Background(), r.Method, proxyURL, r.Body)
+		if err != nil {
+			http.Error(w, "Failed to create proxy request", http.StatusInternalServerError)
+			return
+		}
+
+		// Copy headers
+		for key, values := range r.Header {
+			for _, value := range values {
+				proxyReq.Header.Add(key, value)
+			}
+		}
+
+		// Make request to embedded server
+		client := &http.Client{}
+		resp, err := client.Do(proxyReq)
+		if err != nil {
+			http.Error(w, "Failed to proxy request", http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+
+		// Copy response headers
+		for key, values := range resp.Header {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+
+		// Copy status code
+		w.WriteHeader(resp.StatusCode)
+
+		// Copy response body
+		io.Copy(w, resp.Body)
+	}
+}
