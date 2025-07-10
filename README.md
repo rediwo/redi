@@ -9,12 +9,14 @@ Redi is a Go-based web development toolkit that provides a dynamic web server (`
 - **JavaScript API Endpoints**: Execute `.js` files server-side for API routes
 - **HTML Template Rendering**: Process `.html` files with Go templates and server-side JavaScript
 - **Markdown Support**: Automatic `.md` to HTML conversion with Goldmark parser
+- **Svelte Support**: Server-side Svelte compilation with automatic runtime injection
 - **Template Layouts**: Nested layouts with `{{layout 'name'}}` syntax
 - **Background Mode**: Run server as daemon with `--log` parameter (nohup-like behavior)
 - **Session-based VM Management**: Consistent JavaScript state across requests per client
 - **Static File Serving**: Efficient serving from `public/` directory
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **JavaScript Engine Pooling**: High-performance concurrent request handling
+- **Vimesh Style Integration**: Lightweight CSS generation for Svelte components
 
 ### Rejs JavaScript Runtime
 - **Node.js Compatible**: Supports CommonJS modules and npm packages
@@ -97,38 +99,53 @@ mysite/
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - My Site</title>
-    
-    <!-- Tailwind CSS + Vimesh Style -->
-    <script src="https://unpkg.com/@vimesh/style"></script>
-    <!-- Alpine.js -->
-    <script defer src="https://unpkg.com/alpinejs"></script>
-    
-    <script>
-        $vs.reset({
-            aliasColors: {
-                primary: "#3b82f6"
-            }
-        });
-    </script>
-    <style>[x-cloak] { display: none !important; }</style>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
-<body x-data class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <div class="bg-white rounded-xl shadow-lg p-8">
-            <h1 class="text-3xl font-bold text-gray-900 mb-4">{{.Title}}</h1>
-            <p class="text-gray-600 mb-4">Current time: {{.time}}</p>
-            <p class="text-sm text-gray-500">Request method: {{.method}}</p>
-            
-            {{if .data}}
-            <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-                <h2 class="text-xl font-semibold text-blue-900 mb-2">Submitted Data:</h2>
-                <pre class="text-sm text-blue-800">{{.data}}</pre>
-            </div>
-            {{end}}
+<body>
+    <div class="container">
+        <h1>{{.Title}}</h1>
+        <p>Current time: {{.time}}</p>
+        <p>Request method: {{.method}}</p>
+        
+        {{if .data}}
+        <div class="data-display">
+            <h2>Submitted Data:</h2>
+            <pre>{{.data}}</pre>
         </div>
+        {{end}}
     </div>
 </body>
 </html>
+```
+
+**routes/hello.svelte:** (Svelte component example)
+```svelte
+<script>
+    export let name = 'World';
+    let count = 0;
+    
+    function increment() {
+        count += 1;
+    }
+</script>
+
+<style>
+    /* Styles are scoped by default in Svelte */
+    .greeting {
+        font-size: 2rem;
+        color: #3b82f6;
+    }
+</style>
+
+<div class="container mx-auto p-8">
+    <h1 class="greeting">Hello {name}!</h1>
+    <p class="text-gray-600">You've clicked {count} times</p>
+    <button 
+        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+        on:click={increment}>
+        Click me
+    </button>
+</div>
 ```
 
 **routes/index.js:** (corresponding JavaScript file)
@@ -268,6 +285,7 @@ redi-build app --help
 - `.html` - HTML templates processed with Go templates
 - `.js` - JavaScript files for API endpoints and server-side logic
 - `.md` - Markdown files auto-converted to HTML with Goldmark
+- `.svelte` - Svelte components compiled server-side with automatic runtime injection
 
 #### Dynamic Routes
 Use `[param]` syntax for dynamic segments:
@@ -690,6 +708,70 @@ res.render({
 <h1>Page Content</h1>
 ```
 
+### Svelte Components with Vimesh Style
+
+Redi provides built-in support for Svelte components with automatic server-side compilation:
+
+**Configuration (in your server setup):**
+```go
+import "github.com/rediwo/redi/handlers"
+
+// Configure Svelte with Vimesh Style
+svelteConfig := &handlers.SvelteConfig{
+    MinifyRuntime:    true,
+    MinifyComponents: true,
+    MinifyCSS:       true,
+    UseExternalRuntime: true,
+    VimeshStyle: &utils.VimeshStyleConfig{
+        Enable: true,
+    },
+    VimeshStylePath: "/svelte-vimesh-style.js",
+}
+
+// Register Svelte handler with router
+svelteHandler := handlers.NewSvelteHandlerWithRouter(fs, svelteConfig, router)
+```
+
+**routes/app.svelte:**
+```svelte
+<script>
+    let items = ['Apple', 'Banana', 'Orange'];
+    let newItem = '';
+    
+    function addItem() {
+        if (newItem) {
+            items = [...items, newItem];
+            newItem = '';
+        }
+    }
+</script>
+
+<!-- Using Vimesh Style utility classes -->
+<div class="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
+    <h1 class="text-2xl font-bold mb-4">Shopping List</h1>
+    
+    <div class="flex gap-2 mb-4">
+        <input 
+            bind:value={newItem}
+            class="flex-1 px-3 py-2 border rounded"
+            placeholder="Add item..."
+            on:keydown={(e) => e.key === 'Enter' && addItem()}
+        />
+        <button 
+            on:click={addItem}
+            class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            Add
+        </button>
+    </div>
+    
+    <ul class="space-y-2">
+        {#each items as item}
+            <li class="p-2 bg-gray-100 rounded">{item}</li>
+        {/each}
+    </ul>
+</div>
+```
+
 ### HTTP Method Testing
 
 Redi provides comprehensive HTTP method support with built-in testing capabilities:
@@ -783,6 +865,8 @@ Redi includes extensive testing for:
 - ✅ **Dynamic Routing**: Parameter extraction, URL patterns
 - ✅ **JavaScript Engine**: Module system, require paths, session management
 - ✅ **Template System**: Layout processing, data binding, error handling
+- ✅ **Svelte Support**: Server-side compilation, runtime injection, caching
+- ✅ **Vimesh Style**: CSS extraction, runtime generation, Svelte integration
 - ✅ **Build Tools**: CLI, embedded, and desktop app generation
 - ✅ **Extension System**: Module auto-expansion and integration
 - ✅ **Cross-Platform**: Windows, Linux, macOS compatibility
@@ -802,12 +886,13 @@ redi/
 │   └── redi-build/        # Build tools CLI
 │       ├── main.go        # Build tool entry point
 │       └── builder/       # Builder implementations
-│           ├── types.go   # Builder interfaces
-│           ├── cli.go     # CLI project builder
-│           ├── embed.go   # Embedded app builder
-│           ├── app.go     # Desktop app builder
-│           ├── templates/ # Embedded templates
-│           └── utils.go   # Utility functions
+│           ├── types.go       # Builder interfaces
+│           ├── cli.go         # JavaScript CLI builder
+│           ├── server.go      # Server app builder
+│           ├── standalone.go  # Standalone app builder
+│           ├── app.go         # Desktop app builder
+│           ├── templates/     # Embedded templates
+│           └── utils.go       # Utility functions
 ├── server/                # Server management
 │   ├── config.go          # Configuration types
 │   ├── factory.go         # Server factory

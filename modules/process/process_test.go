@@ -10,7 +10,7 @@ import (
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/dop251/goja_nodejs/require"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 const testVersion = "v1.2.3"
@@ -18,11 +18,11 @@ const testVersion = "v1.2.3"
 // setupTestVM creates a VM with process module for testing
 func setupTestVM(loop *eventloop.EventLoop) *js.Runtime {
 	vm := js.New()
-	registry := require.NewRegistry()
+	requireRegistry := require.NewRegistry()
 	
 	// Use the actual initProcessModule function to ensure we test the real code path
-	config := modules.ModuleConfig{
-		Registry:  registry,
+	config := registry.ModuleConfig{
+		Registry:  requireRegistry,
 		EventLoop: loop,
 		Version:   testVersion,
 		VM:        vm,
@@ -31,7 +31,7 @@ func setupTestVM(loop *eventloop.EventLoop) *js.Runtime {
 	if err != nil {
 		panic("Failed to initialize process module: " + err.Error())
 	}
-	registry.Enable(vm)
+	requireRegistry.Enable(vm)
 	
 	return vm
 }

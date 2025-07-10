@@ -1,0 +1,9 @@
+module {{.ModuleName}}
+
+go 1.23
+
+require github.com/rediwo/redi {{.RediVersion}}
+{{range .Extensions}}
+require {{.}} latest{{- end}}
+
+{{if .IsSourceInstall}}replace github.com/rediwo/redi => {{.ReplaceDir}}{{end}}

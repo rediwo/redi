@@ -10,7 +10,7 @@ import (
 
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 const ModuleName = "process"
@@ -35,11 +35,11 @@ func NewProcessModule(vm *js.Runtime, loop *eventloop.EventLoop, version string)
 
 // init registers the process module automatically
 func init() {
-	modules.RegisterModule("process", initProcessModule)
+	registry.RegisterModule("process", initProcessModule)
 }
 
 // initProcessModule initializes the process module
-func initProcessModule(config modules.ModuleConfig) error {
+func initProcessModule(config registry.ModuleConfig) error {
 	config.Registry.RegisterNativeModule(ModuleName, func(vm *js.Runtime, module *js.Object) {
 		exports := module.Get("exports").(*js.Object)
 		pm := NewProcessModule(vm, config.EventLoop, config.Version)

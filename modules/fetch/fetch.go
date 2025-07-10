@@ -10,7 +10,7 @@ import (
 
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 // FetchResponse represents the response from a fetch request
@@ -29,11 +29,11 @@ type FetchModule struct {
 
 // init registers the fetch module automatically
 func init() {
-	modules.RegisterModule("fetch", initFetchModule)
+	registry.RegisterModule("fetch", initFetchModule)
 }
 
 // initFetchModule initializes the fetch module
-func initFetchModule(config modules.ModuleConfig) error {
+func initFetchModule(config registry.ModuleConfig) error {
 	if config.EventLoop != nil && config.VM != nil {
 		fetchModule := NewFetchModule(config.EventLoop)
 		// Register as global object

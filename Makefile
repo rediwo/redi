@@ -114,7 +114,7 @@ start: build
 .PHONY: test
 test:
 	@echo "$(YELLOW)Running all tests...$(RESET)"
-	@go test -v ./...
+	@go test -v -count=1 ./...
 	@echo "$(GREEN)✅ All tests completed$(RESET)"
 
 ## test-unit: Run unit tests only

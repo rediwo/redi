@@ -1,16 +1,17 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
+	"embed"
 
 	"github.com/rediwo/redi/runtime"
-	"github.com/rediwo/redi/server"
-{{range .Extensions}}
-	_ "{{.}}"
-{{- end}}
+	{{- range .Extensions }}
+	_ "{{ . }}"
+	{{- end }}
 )
 
 var (
@@ -18,73 +19,93 @@ var (
 	Version = "dev"
 )
 
+//go:embed {{.ScriptName}}
+var scriptFS embed.FS
+
 func main() {
-	// Check for version flag first
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+	// Define command line flags
+	var (
+		showVersion = false
+		timeoutMs   = 0
+		scriptArgs  []string
+	)
+
+	// Parse command line arguments manually to handle Node.js-style syntax
+	args := os.Args[1:]
+	i := 0
+	
+	for i < len(args) {
+		arg := args[i]
+		
+		if arg == "--version" || arg == "-v" {
+			showVersion = true
+			i++
+		} else if arg == "--timeout" {
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "Error: --timeout requires a value\n")
+				os.Exit(1)
+			}
+			timeout, err := strconv.Atoi(args[i+1])
+			if err != nil || timeout < 0 {
+				fmt.Fprintf(os.Stderr, "Error: --timeout must be a positive integer (milliseconds)\n")
+				os.Exit(1)
+			}
+			timeoutMs = timeout
+			i += 2
+		} else if strings.HasPrefix(arg, "--timeout=") {
+			timeoutStr := strings.TrimPrefix(arg, "--timeout=")
+			timeout, err := strconv.Atoi(timeoutStr)
+			if err != nil || timeout < 0 {
+				fmt.Fprintf(os.Stderr, "Error: --timeout must be a positive integer (milliseconds)\n")
+				os.Exit(1)
+			}
+			timeoutMs = timeout
+			i++
+		} else if !strings.HasPrefix(arg, "-") {
+			// All remaining arguments are script arguments
+			scriptArgs = args[i:]
+			break
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: Unknown option: %s\n", arg)
+			os.Exit(1)
+		}
+	}
+
+	if showVersion {
 		versionProvider := runtime.NewVersionProvider(Version)
 		fmt.Printf("{{.BinaryName}} version %s\n", versionProvider.GetVersion())
-		return
+		os.Exit(0)
 	}
 
-	var root string
-	var port int
-	var version bool
-	var logFile string
-	var daemon bool
-
-	flag.StringVar(&root, "root", "", "Root directory containing public and routes folders")
-	flag.IntVar(&port, "port", 8080, "Port to serve on")
-	flag.BoolVar(&version, "version", false, "Show version information")
-	flag.StringVar(&logFile, "log", "", "Log file path (enables background mode like nohup)")
-	flag.BoolVar(&daemon, "daemon", false, "Internal flag for daemon mode")
-
-	// Custom usage message
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "{{.AppName}} - Dynamic web serving with JavaScript, Markdown, and templates\n\n")
-		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  %s --root=mysite --port=8080          # Run in foreground\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --root=mysite --log=server.log     # Run in background (like nohup)\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --version                          # Show version\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\nWhen using --log, the server runs in background mode and all output\n")
-		fmt.Fprintf(os.Stderr, "is redirected to the log file. A PID file (.pid) is also created.\n")
-		fmt.Fprintf(os.Stderr, "Use 'kill $(cat logfile.pid)' to stop the background server.\n")
-	}
-
-	flag.Parse()
-
-	if version {
-		versionProvider := runtime.NewVersionProvider(Version)
-		fmt.Printf("{{.BinaryName}} version %s\n", versionProvider.GetVersion())
-		return
-	}
-
-	if root == "" {
-		fmt.Fprintf(os.Stderr, "Error: --root flag is required\n")
-		flag.Usage()
+	// Read embedded script
+	scriptContent, err := scriptFS.ReadFile("{{.ScriptName}}")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to read embedded script: %v\n", err)
 		os.Exit(1)
 	}
 
-	if _, err := os.Stat(root); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "Error: Root directory %s does not exist\n", root)
+	// Create temporary file for script
+	tempFile, err := os.CreateTemp("", "{{.BinaryName}}-*.js")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to create temp file: %v\n", err)
 		os.Exit(1)
 	}
+	defer os.Remove(tempFile.Name())
 
+	if _, err := tempFile.Write(scriptContent); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to write script: %v\n", err)
+		os.Exit(1)
+	}
+	tempFile.Close()
+
+	// Run the script with timeout
+	timeoutDuration := time.Duration(timeoutMs) * time.Millisecond
 	versionProvider := runtime.NewVersionProvider(Version)
-	currentVersion := versionProvider.GetVersion()
-
-	config := &server.Config{
-		Root:    root,
-		Port:    port,
-		Version: currentVersion,
-		LogFile: logFile,
-		Daemon:  daemon,
+	
+	exitCode, err := runtime.ExecuteScript(tempFile.Name(), scriptArgs, timeoutDuration, versionProvider.GetVersion())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Script error: %v\n", err)
 	}
-
-	launcher := server.NewLauncher()
-	if err := launcher.Start(config); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
-	}
+	
+	os.Exit(exitCode)
 }

@@ -6,18 +6,10 @@ import (
 
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
-	"github.com/dop251/goja_nodejs/require"
 
 	"github.com/rediwo/redi/filesystem"
 	"github.com/rediwo/redi/handlers"
-
-	// Import all modules to trigger their init() functions
-	_ "github.com/rediwo/redi/modules/child_process"
-	_ "github.com/rediwo/redi/modules/console"
-	_ "github.com/rediwo/redi/modules/fetch"
-	_ "github.com/rediwo/redi/modules/fs"
-	_ "github.com/rediwo/redi/modules/path"
-	_ "github.com/rediwo/redi/modules/process"
+	_ "github.com/rediwo/redi/modules"
 )
 
 // Executor executes JavaScript code
@@ -44,7 +36,7 @@ func (e *Executor) Execute(config *Config) (int, error) {
 	if err := config.Validate(); err != nil {
 		return 1, err
 	}
-	
+
 	return e.runScript(config)
 }
 
@@ -69,19 +61,27 @@ func (e *Executor) runScript(config *Config) (int, error) {
 
 		// Setup module registry using VMManager with custom path resolver
 		vmManager := handlers.NewVMManager(e.fs, config.Version)
-		
-		_, err := vmManager.SetupRegistry(loop, vm, config.BasePath)
+
+		_, requireModule, err := vmManager.SetupRegistry(loop, vm, config.BasePath)
 		if err != nil {
 			done <- RuntimeError{Message: "failed to setup registry", Err: err}
 			return
 		}
 
 		// Set up console
-		consoleObj := require.Require(vm, "console")
+		consoleObj, err := requireModule.Require("console")
+		if err != nil {
+			done <- RuntimeError{Message: "failed to require console", Err: err}
+			return
+		}
 		vm.Set("console", consoleObj)
 
 		// Get the process module and enhance it with rejs-specific properties
-		processValue := require.Require(vm, "process")
+		processValue, err := requireModule.Require("process")
+		if err != nil {
+			done <- RuntimeError{Message: "failed to require process", Err: err}
+			return
+		}
 		if processValue != nil {
 			processObj := processValue.ToObject(vm)
 			// Update argv with correct values for rejs
@@ -96,8 +96,12 @@ func (e *Executor) runScript(config *Config) (int, error) {
 
 		// Instead of running the script directly, require it as a module
 		// This ensures proper module context and relative path resolution
-		mainModule := require.Require(vm, config.ScriptPath)
-		
+		mainModule, err := requireModule.Require(config.ScriptPath)
+		if err != nil {
+			done <- RuntimeError{Message: "failed to load main script as module", Err: err}
+			return
+		}
+
 		// The module should execute when required
 		// Check if there was an error in module execution
 		if mainModule == nil {
@@ -144,9 +148,9 @@ func ExecuteScript(scriptPath string, args []string, timeout time.Duration, vers
 	if err != nil {
 		return 1, err
 	}
-	
+
 	config.WithArgs(args).WithTimeout(timeout).WithVersion(version)
-	
+
 	executor := NewExecutor()
 	return executor.Execute(config)
 }

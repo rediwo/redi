@@ -13,11 +13,12 @@ import (
 )
 
 type Server struct {
-	port       int
-	router     *mux.Router
-	fs         filesystem.FileSystem
-	httpServer *http.Server
-	version    string
+	port           int
+	router         *mux.Router
+	fs             filesystem.FileSystem
+	httpServer     *http.Server
+	version        string
+	handlerManager *HandlerManager
 }
 
 func NewServer(root string, port int) *Server {
@@ -51,6 +52,11 @@ func (s *Server) Start() error {
 		return fmt.Errorf("failed to setup routes: %w", err)
 	}
 
+	// Register additional routes from handlers before static file server
+	if s.handlerManager != nil {
+		s.handlerManager.RegisterAdditionalRoutes(s.router)
+	}
+	
 	s.setupStaticFileServer()
 
 	addr := fmt.Sprintf(":%d", s.port)
@@ -65,7 +71,7 @@ func (s *Server) Start() error {
 
 func (s *Server) setupRoutes() error {
 	routeScanner := NewRouteScanner(s.fs, "routes")
-	handlerManager := NewHandlerManagerWithVersion(s.fs, s.version)
+	s.handlerManager = NewHandlerManagerWithServer(s.fs, s.version, s.router)
 
 	routes, err := routeScanner.ScanRoutes()
 	if err != nil {
@@ -73,10 +79,13 @@ func (s *Server) setupRoutes() error {
 	}
 
 	for _, route := range routes {
-		handler := handlerManager.GetHandler(route)
+		handler := s.handlerManager.GetHandler(route)
 		s.router.HandleFunc(route.Path, handler).Methods("GET", "POST", "PUT", "DELETE")
 		log.Printf("Registered route: %s -> %s", route.Path, route.FilePath)
 	}
+
+	// Register additional routes for handlers (e.g., Svelte runtime, Vimesh Style)
+	s.handlerManager.RegisterAdditionalRoutes(s.router)
 
 	return nil
 }

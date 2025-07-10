@@ -9,12 +9,7 @@ import (
 
 	"github.com/rediwo/redi/filesystem"
 
-	// Import all modules to trigger their init() functions
-	_ "github.com/rediwo/redi/modules/console"
-	_ "github.com/rediwo/redi/modules/fetch"
-	_ "github.com/rediwo/redi/modules/fs"
-	_ "github.com/rediwo/redi/modules/path"
-	_ "github.com/rediwo/redi/modules/process"
+	_ "github.com/rediwo/redi/modules"
 )
 
 // generateSessionID creates a session identifier based on client characteristics
@@ -27,17 +22,17 @@ func generateSessionID(r *http.Request) string {
 	} else if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		clientIP = strings.Split(forwarded, ",")[0]
 	}
-	
+
 	// Remove port number from IP address for consistent session identification
 	if lastColon := strings.LastIndex(clientIP, ":"); lastColon != -1 {
 		clientIP = clientIP[:lastColon]
 	}
 	// Handle IPv6 addresses wrapped in brackets
 	clientIP = strings.Trim(clientIP, "[]")
-	
+
 	userAgent := r.Header.Get("User-Agent")
 	sessionData := clientIP + "|" + userAgent
-	
+
 	// Create MD5 hash for shorter session ID
 	hash := md5.Sum([]byte(sessionData))
 	return hex.EncodeToString(hash[:])

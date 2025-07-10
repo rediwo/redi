@@ -9,7 +9,7 @@ import (
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/rediwo/redi/filesystem"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 const ModuleName = "fs"
@@ -43,11 +43,11 @@ func NewFSModuleWithFS(fs filesystem.FileSystem, basePath string, loop *eventloo
 
 // init registers the fs module automatically
 func init() {
-	modules.RegisterModule("fs", initFSModule)
+	registry.RegisterModule("fs", initFSModule)
 }
 
 // initFSModule initializes the fs module
-func initFSModule(config modules.ModuleConfig) error {
+func initFSModule(config registry.ModuleConfig) error {
 	var fsModule *FSModule
 	if config.FileSystem != nil {
 		fsModule = NewFSModuleWithFS(config.FileSystem, config.BasePath, config.EventLoop)

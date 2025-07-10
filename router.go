@@ -61,7 +61,7 @@ func (rs *RouteScanner) ScanRoutes() ([]Route, error) {
 		}
 
 		ext := filepath.Ext(name)
-		if ext != ".html" && ext != ".js" && ext != ".md" {
+		if ext != ".html" && ext != ".js" && ext != ".md" && ext != ".svelte" {
 			return nil
 		}
 

@@ -1,0 +1,90 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/rediwo/redi/runtime"
+	"github.com/rediwo/redi/server"
+{{range .Extensions}}
+	_ "{{.}}"
+{{- end}}
+)
+
+var (
+	// Version will be set by build flags or git tag
+	Version = "dev"
+)
+
+func main() {
+	// Check for version flag first
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		versionProvider := runtime.NewVersionProvider(Version)
+		fmt.Printf("{{.BinaryName}} version %s\n", versionProvider.GetVersion())
+		return
+	}
+
+	var root string
+	var port int
+	var version bool
+	var logFile string
+	var daemon bool
+
+	flag.StringVar(&root, "root", "", "Root directory containing public and routes folders")
+	flag.IntVar(&port, "port", 8080, "Port to serve on")
+	flag.BoolVar(&version, "version", false, "Show version information")
+	flag.StringVar(&logFile, "log", "", "Log file path (enables background mode like nohup)")
+	flag.BoolVar(&daemon, "daemon", false, "Internal flag for daemon mode")
+
+	// Custom usage message
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "{{.AppName}} - Dynamic web serving with JavaScript, Markdown, and templates\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --port=8080          # Run in foreground\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --log=server.log     # Run in background (like nohup)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --version                          # Show version\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nWhen using --log, the server runs in background mode and all output\n")
+		fmt.Fprintf(os.Stderr, "is redirected to the log file. A PID file (.pid) is also created.\n")
+		fmt.Fprintf(os.Stderr, "Use 'kill $(cat logfile.pid)' to stop the background server.\n")
+	}
+
+	flag.Parse()
+
+	if version {
+		versionProvider := runtime.NewVersionProvider(Version)
+		fmt.Printf("{{.BinaryName}} version %s\n", versionProvider.GetVersion())
+		return
+	}
+
+	if root == "" {
+		fmt.Fprintf(os.Stderr, "Error: --root flag is required\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "Error: Root directory %s does not exist\n", root)
+		os.Exit(1)
+	}
+
+	versionProvider := runtime.NewVersionProvider(Version)
+	currentVersion := versionProvider.GetVersion()
+
+	config := &server.Config{
+		Root:    root,
+		Port:    port,
+		Version: currentVersion,
+		LogFile: logFile,
+		Daemon:  daemon,
+	}
+
+	launcher := server.NewLauncher()
+	if err := launcher.Start(config); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
+}

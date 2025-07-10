@@ -8,7 +8,7 @@ import (
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/dop251/goja_nodejs/require"
 	"github.com/rediwo/redi/filesystem"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 // VMManager manages JavaScript VM creation and module initialization
@@ -26,15 +26,15 @@ func NewVMManager(fs filesystem.FileSystem, version string) *VMManager {
 }
 
 // SetupRegistry creates and configures a require registry with all modules
-func (vm *VMManager) SetupRegistry(loop *eventloop.EventLoop, jsVM *js.Runtime, basePath string) (*require.Registry, error) {
-	registry := require.NewRegistry(
+func (vm *VMManager) SetupRegistry(loop *eventloop.EventLoop, jsVM *js.Runtime, basePath string) (*require.Registry, *require.RequireModule, error) {
+	requireRegistry := require.NewRegistry(
 		require.WithLoader(vm.createModuleLoader(basePath)),
 		require.WithPathResolver(vm.createPathResolver(basePath)), // Custom path resolver for absolute paths
 		require.WithGlobalFolders(), // Enable global folders resolution
 	)
 
-	config := modules.ModuleConfig{
-		Registry:   registry,
+	config := registry.ModuleConfig{
+		Registry:   requireRegistry,
 		EventLoop:  loop,
 		FileSystem: vm.fs,
 		BasePath:   basePath,
@@ -43,15 +43,15 @@ func (vm *VMManager) SetupRegistry(loop *eventloop.EventLoop, jsVM *js.Runtime, 
 	}
 
 	// Initialize all auto-registered modules first
-	err := modules.InitializeAllModules(config)
+	err := registry.InitializeAllModules(config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Enable the registry in the VM to make modules available
-	registry.Enable(jsVM)
+	requireModule := requireRegistry.Enable(jsVM)
 
-	return registry, nil
+	return requireRegistry, requireModule, nil
 }
 
 // createModuleLoader creates a module loader function for the require system

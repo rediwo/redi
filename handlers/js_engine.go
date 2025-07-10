@@ -243,7 +243,7 @@ func (engine *SharedJSEngine) Start() error {
 
 		// Set up VM manager and registry
 		vmManager := NewVMManager(engine.fs, engine.version)
-		registry, err := vmManager.SetupRegistry(engine.eventLoop, vm, "routes")
+		registry, requireModule, err := vmManager.SetupRegistry(engine.eventLoop, vm, "routes")
 		if err != nil {
 			done <- fmt.Errorf("failed to setup registry: %v", err)
 			return
@@ -251,11 +251,19 @@ func (engine *SharedJSEngine) Start() error {
 		engine.registry = registry
 
 		// Set up console
-		consoleObj := require.Require(vm, "console")
+		consoleObj, err := requireModule.Require("console")
+		if err != nil {
+			done <- fmt.Errorf("failed to require console: %v", err)
+			return
+		}
 		vm.Set("console", consoleObj)
 
 		// Set up process as global
-		processObj := require.Require(vm, "process")
+		processObj, err := requireModule.Require("process")
+		if err != nil {
+			done <- fmt.Errorf("failed to require process: %v", err)
+			return
+		}
 		vm.Set("process", processObj)
 
 		done <- nil

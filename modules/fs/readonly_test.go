@@ -10,7 +10,7 @@ import (
 	"github.com/dop251/goja_nodejs/eventloop"
 	"github.com/dop251/goja_nodejs/require"
 	"github.com/rediwo/redi/filesystem"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 //go:embed readonly_test.go
@@ -32,11 +32,11 @@ func TestReadOnlyFilesystem(t *testing.T) {
 	
 	// Set up VM and modules outside of subtests
 	vm := js.New()
-	registry := require.NewRegistry()
+	requireRegistry := require.NewRegistry()
 	
 	// Use the actual initFSModule function with read-only filesystem
-	config := modules.ModuleConfig{
-		Registry:   registry,
+	config := registry.ModuleConfig{
+		Registry:   requireRegistry,
 		FileSystem: embedFS,
 		BasePath:   "",
 		EventLoop:  loop,
@@ -46,7 +46,7 @@ func TestReadOnlyFilesystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize fs module: %v", err)
 	}
-	registry.Enable(vm)
+	requireRegistry.Enable(vm)
 	
 	// Get fs module
 	fsObject := require.Require(vm, "fs")
@@ -138,11 +138,11 @@ func TestWritableFilesystem(t *testing.T) {
 	
 	// Set up VM and modules outside of subtests
 	vm := js.New()
-	registry := require.NewRegistry()
+	requireRegistryOS := require.NewRegistry()
 	
 	// Use the actual initFSModule function with writable filesystem
-	config := modules.ModuleConfig{
-		Registry:   registry,
+	config := registry.ModuleConfig{
+		Registry:   requireRegistryOS,
 		FileSystem: osFS,
 		BasePath:   tmpDir,
 		EventLoop:  loop,
@@ -152,7 +152,7 @@ func TestWritableFilesystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize fs module: %v", err)
 	}
-	registry.Enable(vm)
+	requireRegistryOS.Enable(vm)
 	
 	// Get fs module
 	fsObject := require.Require(vm, "fs")

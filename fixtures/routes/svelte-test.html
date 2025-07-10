@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Svelte Components Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 2em;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .component-demo {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 1em 0;
+            overflow: hidden;
+        }
+        .component-demo h2 {
+            background: #f5f5f5;
+            margin: 0;
+            padding: 1em;
+            border-bottom: 1px solid #ddd;
+        }
+        iframe {
+            width: 100%;
+            border: none;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Svelte Components in Redi</h1>
+    <p>The following Svelte components are rendered server-side and work without any build step:</p>
+    
+    <div class="component-demo">
+        <h2>Hello Component</h2>
+        <iframe src="/hello" height="200"></iframe>
+    </div>
+    
+    <div class="component-demo">
+        <h2>Counter Component</h2>
+        <iframe src="/counter" height="600"></iframe>
+    </div>
+    
+    <div class="component-demo">
+        <h2>Todo App</h2>
+        <iframe src="/todo" height="800"></iframe>
+    </div>
+    
+    <h2>How it works</h2>
+    <ul>
+        <li>Svelte compiler (1.46 MB) is embedded in the Go binary</li>
+        <li>Components are compiled on-the-fly when requested</li>
+        <li>No external build tools or Node.js required</li>
+        <li>Full Svelte features: reactivity, event handling, CSS scoping</li>
+    </ul>
+</body>
+</html>

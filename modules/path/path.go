@@ -6,18 +6,18 @@ import (
 	
 	js "github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
-	"github.com/rediwo/redi/modules"
+	"github.com/rediwo/redi/registry"
 )
 
 const ModuleName = "path"
 
 // init registers the path module automatically
 func init() {
-	modules.RegisterModule("path", initPathModule)
+	registry.RegisterModule("path", initPathModule)
 }
 
 // initPathModule initializes the path module
-func initPathModule(config modules.ModuleConfig) error {
+func initPathModule(config registry.ModuleConfig) error {
 	registerPathGlobals(config.Registry)
 	return nil
 }

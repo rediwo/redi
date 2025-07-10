@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Svelte</title>
+</head>
+<body>
+    <h1>Debug SystemJS Module Loading</h1>
+    <p>Open browser console to see the results</p>
+    
+    <iframe src="/hello" width="100%" height="400"></iframe>
+    
+    <script>
+        // Monitor console messages from iframe
+        window.addEventListener('message', function(e) {
+            console.log('Message from iframe:', e.data);
+        });
+    </script>
+</body>
+</html>

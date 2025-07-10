@@ -10,6 +10,7 @@ type Config struct {
 	Platform    string
 	Extensions  []string
 	ConfigFile  string
+	ScriptPath  string   // For CLI builder - main JavaScript file
 }
 
 // Builder interface for different build types

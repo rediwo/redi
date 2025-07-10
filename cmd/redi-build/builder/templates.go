@@ -30,4 +30,5 @@ type TemplateData struct {
 	RediVersion    string
 	IsSourceInstall bool
 	ReplaceDir     string
+	ScriptName     string   // For CLI builder - script filename
 }
