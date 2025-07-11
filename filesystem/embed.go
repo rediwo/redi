@@ -39,3 +39,8 @@ func (efs *EmbedFileSystem) GetFS() fs.FS {
 func (efs *EmbedFileSystem) IsReadOnly() bool {
 	return true
 }
+
+func (efs *EmbedFileSystem) GetRoot() string {
+	// Embedded filesystems don't have a traditional root path
+	return "."
+}

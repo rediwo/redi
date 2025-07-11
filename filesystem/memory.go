@@ -133,6 +133,11 @@ func (mfs *MemoryFileSystem) IsReadOnly() bool {
 	return false
 }
 
+func (mfs *MemoryFileSystem) GetRoot() string {
+	// Memory filesystem has no physical root
+	return "."
+}
+
 // hasPathPrefix checks if path has the given prefix (replaces deprecated filepath.HasPrefix)
 func hasPathPrefix(path, prefix string) bool {
 	if prefix == "" {

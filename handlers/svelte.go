@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	_ "embed"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,6 +29,9 @@ var svelteCompilerJS string
 //go:embed svelte-runtime.js
 var svelteRuntimeJS string
 
+//go:embed svelte-async.js
+var svelteAsyncJS string
+
 // SvelteConfig holds all Svelte-related settings
 type SvelteConfig struct {
 	// Minification settings
@@ -35,57 +39,97 @@ type SvelteConfig struct {
 	MinifyComponents bool // Enable component code minification
 	MinifyCSS        bool // Enable CSS minification
 	DevMode          bool // Disable minification in development
-	
+
 	// Runtime resource settings
 	UseExternalRuntime   bool          // Use external runtime file instead of inline
 	RuntimePath          string        // Path for runtime resource (default: "/svelte-runtime.js")
 	RuntimeCacheDuration time.Duration // Cache duration for runtime resource
-	
+
+	// Async component loading settings
+	EnableAsyncLoading     bool          // Enable async component loading
+	ComponentAPIPath       string        // Path for component API (default: "/svelte/components")
+	ComponentCacheDuration time.Duration // Cache duration for component resources
+	AsyncLibraryPath       string        // Path for async library (default: "/svelte-async.js")
+
 	// Vimesh Style settings
-	VimeshStyle       *utils.VimeshStyleConfig // Vimesh Style configuration
-	VimeshStylePath   string                   // Path for Vimesh Style resource (default: "/svelte-vimesh-style.js")
+	VimeshStyle     *utils.VimeshStyleConfig // Vimesh Style configuration
+	VimeshStylePath string                   // Path for Vimesh Style resource (default: "/svelte-vimesh-style.js")
 }
 
 // DefaultSvelteConfig returns default Svelte settings
 func DefaultSvelteConfig() *SvelteConfig {
 	return &SvelteConfig{
-		MinifyRuntime:        true,
-		MinifyComponents:     true,
-		MinifyCSS:           true,
-		DevMode:             false,
-		UseExternalRuntime:  true,
-		RuntimePath:         "/svelte-runtime.js",
-		RuntimeCacheDuration: 365 * 24 * time.Hour, // 1 year
-		VimeshStyle:         utils.DefaultVimeshStyleConfig(),
-		VimeshStylePath:     "/svelte-vimesh-style.js",
+		MinifyRuntime:          true,
+		MinifyComponents:       true,
+		MinifyCSS:              true,
+		DevMode:                false,
+		UseExternalRuntime:     true,
+		RuntimePath:            "/svelte/runtime.js",
+		RuntimeCacheDuration:   365 * 24 * time.Hour, // 1 year
+		EnableAsyncLoading:     true,
+		ComponentAPIPath:       "/svelte/components",
+		ComponentCacheDuration: 24 * time.Hour, // 1 day
+		AsyncLibraryPath:       "/svelte/async.js",
+		VimeshStyle:            utils.DefaultVimeshStyleConfig(),
+		VimeshStylePath:        "/svelte/vimesh-style.js",
 	}
 }
 
 type SvelteHandler struct {
-	fs               filesystem.FileSystem
-	vm               *goja.Runtime
-	compileFunc      goja.Callable
-	initialized      bool
-	templateHandler  *TemplateHandler
-	mu               sync.Mutex
-	cache            map[string]*CachedResult
-	cacheMu          sync.RWMutex
-	config           *SvelteConfig
-	minifiedRuntime  string
-	runtimeMinified  bool
-	runtimeMu        sync.Mutex
-	minifier         *minify.M
+	fs                  filesystem.FileSystem
+	vm                  *goja.Runtime
+	compileFunc         goja.Callable
+	initialized         bool
+	templateHandler     *TemplateHandler
+	mu                  sync.Mutex
+	cache               map[string]*CachedResult
+	cacheMu             sync.RWMutex
+	config              *SvelteConfig
+	minifiedRuntime     string
+	runtimeMinified     bool
+	runtimeMu           sync.Mutex
+	minifiedVimeshStyle string
+	vimeshMinified      bool
+	vimeshMu            sync.Mutex
+	minifiedAsyncLib    string
+	asyncLibMinified    bool
+	asyncLibMu          sync.Mutex
+	minifier            *minify.M
+	componentRegistry   map[string]*ComponentInfo // Registry for compiled components
+	registryMu          sync.RWMutex              // Mutex for component registry
 }
 
 type CachedResult struct {
-	HTML        string
-	ContentHash string // MD5 hash of the source content
-	ConfigHash  string // Hash of config for cache invalidation
+	HTML         string
+	ContentHash  string   // MD5 hash of the source content
+	ConfigHash   string   // Hash of config for cache invalidation
+	Dependencies []string // List of component dependencies
 }
 
 type SvelteCompileResult struct {
 	JS  string `json:"js"`
 	CSS string `json:"css"`
+}
+
+type AsyncComponentResponse struct {
+	Success      bool                     `json:"success"`
+	Component    string                   `json:"component"`
+	ClassName    string                   `json:"className"`
+	JS           string                   `json:"js"`
+	CSS          string                   `json:"css"`
+	Dependencies []AsyncComponentResponse `json:"dependencies,omitempty"`
+	Error        string                   `json:"error,omitempty"`
+}
+
+type ComponentInfo struct {
+	FilePath     string    // Path to the component file
+	Name         string    // Component name (e.g., "Button")
+	ClassName    string    // Class name (e.g., "Button")
+	CompiledJS   string    // Compiled JavaScript code
+	CompiledCSS  string    // Compiled CSS code
+	Dependencies []string  // Import dependencies
+	LastModified time.Time // Last modification time
+	ContentHash  string    // Hash of source content
 }
 
 func NewSvelteHandler(fs filesystem.FileSystem) *SvelteHandler {
@@ -95,21 +139,22 @@ func NewSvelteHandler(fs filesystem.FileSystem) *SvelteHandler {
 func NewSvelteHandlerWithConfig(fs filesystem.FileSystem, config *SvelteConfig) *SvelteHandler {
 	// Create and configure minifier with safer settings
 	m := minify.New()
-	
+
 	// Configure JavaScript minifier with much safer options for Svelte runtime
 	jsMinifier := &js.Minifier{
-		Precision: 0, // Keep full precision for numbers
+		Precision:    0,    // Keep full precision for numbers
 		KeepVarNames: true, // Keep variable names to avoid breaking references
 	}
 	m.Add("application/javascript", jsMinifier)
 	m.AddFunc("text/css", css.Minify)
-	
+
 	return &SvelteHandler{
-		fs:              fs,
-		templateHandler: NewTemplateHandler(fs),
-		cache:           make(map[string]*CachedResult),
-		config:          config,
-		minifier:        m,
+		fs:                fs,
+		templateHandler:   NewTemplateHandler(fs),
+		cache:             make(map[string]*CachedResult),
+		config:            config,
+		minifier:          m,
+		componentRegistry: make(map[string]*ComponentInfo),
 	}
 }
 
@@ -126,62 +171,200 @@ func (sh *SvelteHandler) RegisterRoutes(router *mux.Router) {
 		router.HandleFunc(sh.config.RuntimePath, sh.ServeSvelteRuntime).Methods("GET", "HEAD")
 		log.Printf("Registered Svelte runtime route: %s", sh.config.RuntimePath)
 	}
-	
+
 	// Register Vimesh Style route if enabled
 	if sh.config.VimeshStyle != nil && sh.config.VimeshStyle.Enable {
 		router.HandleFunc(sh.config.VimeshStylePath, sh.ServeVimeshStyle).Methods("GET", "HEAD")
 		log.Printf("Registered Svelte Vimesh Style route: %s", sh.config.VimeshStylePath)
+	}
+
+	// Register async component loading API if enabled
+	if sh.config.EnableAsyncLoading {
+		router.HandleFunc(sh.config.ComponentAPIPath+"/{component:.+}", sh.ServeAsyncComponent).Methods("GET", "HEAD")
+		router.HandleFunc(sh.config.AsyncLibraryPath, sh.ServeAsyncLibrary).Methods("GET", "HEAD")
+		log.Printf("Registered Svelte async component API route: %s", sh.config.ComponentAPIPath)
+		log.Printf("Registered Svelte async library route: %s", sh.config.AsyncLibraryPath)
 	}
 }
 
 // ServeSvelteRuntime serves the Svelte runtime as a static resource
 func (sh *SvelteHandler) ServeSvelteRuntime(w http.ResponseWriter, r *http.Request) {
 	runtime := sh.getMinifiedRuntime()
-	
+
 	// Calculate ETag based on runtime content
 	hash := md5.Sum([]byte(runtime))
 	etag := `"` + hex.EncodeToString(hash[:]) + `"`
-	
+
 	// Check if client has cached version
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	
+
 	// Set caching headers
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", int(sh.config.RuntimeCacheDuration.Seconds())))
-	
+
 	// Add compression hint
 	w.Header().Set("Vary", "Accept-Encoding")
-	
+
 	w.Write([]byte(runtime))
 }
 
 // ServeVimeshStyle serves the Vimesh Style JavaScript as a static resource
 func (sh *SvelteHandler) ServeVimeshStyle(w http.ResponseWriter, r *http.Request) {
-	vimeshJS := utils.GetVimeshStyleJS()
-	
+	vimeshJS := sh.getMinifiedVimeshStyle()
+
 	// Calculate ETag based on content
 	hash := md5.Sum([]byte(vimeshJS))
 	etag := `"` + hex.EncodeToString(hash[:]) + `"`
-	
+
 	// Check if client has cached version
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	
+
 	// Set caching headers
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", int(sh.config.RuntimeCacheDuration.Seconds())))
-	
+
 	// Add compression hint
 	w.Header().Set("Vary", "Accept-Encoding")
-	
+
 	w.Write([]byte(vimeshJS))
+}
+
+// ServeAsyncComponent serves individual components as JSON for async loading
+func (sh *SvelteHandler) ServeAsyncComponent(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	componentPath := vars["component"]
+
+	// Validate component path
+	if componentPath == "" {
+		http.Error(w, "Component path is required", http.StatusBadRequest)
+		return
+	}
+
+	// Add .svelte extension if not present
+	if !strings.HasSuffix(componentPath, ".svelte") {
+		componentPath += ".svelte"
+	}
+
+	// Resolve to routes directory
+	fullPath := filepath.Join("routes", componentPath)
+
+	// Check if file exists
+	if _, err := sh.fs.Stat(fullPath); err != nil {
+		response := AsyncComponentResponse{
+			Success: false,
+			Error:   "Component not found",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get component info
+	info, err := sh.getComponentInfo(fullPath)
+	if err != nil {
+		response := AsyncComponentResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to compile component: %v", err),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Transform component to IIFE format
+	imports := make(map[string]string)
+	jsCode := sh.transformToIIFE(info.CompiledJS, info.ClassName, imports, info.FilePath)
+
+	// Wrap the component code to ensure it has access to Svelte runtime functions
+	// The runtime functions are expected to be available in the global scope
+	jsCode = `/* Component: ` + info.Name + ` */
+` + jsCode
+
+	jsCode = sh.minifyComponentCode(jsCode)
+
+	// Create response
+	response := AsyncComponentResponse{
+		Success:   true,
+		Component: info.Name,
+		ClassName: info.ClassName,
+		JS:        jsCode,
+		CSS:       sh.minifyCSS(info.CompiledCSS),
+	}
+
+	// Add dependencies if requested
+	if r.URL.Query().Get("include_deps") == "true" {
+		for _, depPath := range info.Dependencies {
+			depInfo, err := sh.getComponentInfo(depPath)
+			if err != nil {
+				continue // Skip failed dependencies
+			}
+
+			depImports := make(map[string]string)
+			depJS := sh.transformToIIFE(depInfo.CompiledJS, depInfo.ClassName, depImports, depInfo.FilePath)
+			depJS = sh.minifyComponentCode(depJS)
+
+			depResponse := AsyncComponentResponse{
+				Success:   true,
+				Component: depInfo.Name,
+				ClassName: depInfo.ClassName,
+				JS:        depJS,
+				CSS:       sh.minifyCSS(depInfo.CompiledCSS),
+			}
+			response.Dependencies = append(response.Dependencies, depResponse)
+		}
+	}
+
+	// Set caching headers
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(sh.config.ComponentCacheDuration.Seconds())))
+
+	// Calculate ETag based on component content
+	hash := md5.Sum([]byte(info.ContentHash))
+	etag := `"` + hex.EncodeToString(hash[:]) + `"`
+	w.Header().Set("ETag", etag)
+
+	// Check if client has cached version
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// ServeAsyncLibrary serves the async component loading library
+func (sh *SvelteHandler) ServeAsyncLibrary(w http.ResponseWriter, r *http.Request) {
+	asyncLib := sh.getMinifiedAsyncLibrary()
+
+	// Calculate ETag based on library content
+	hash := md5.Sum([]byte(asyncLib))
+	etag := `"` + hex.EncodeToString(hash[:]) + `"`
+
+	// Check if client has cached version
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	// Set caching headers
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", int(sh.config.RuntimeCacheDuration.Seconds())))
+
+	// Add compression hint
+	w.Header().Set("Vary", "Accept-Encoding")
+
+	w.Write([]byte(asyncLib))
 }
 
 // getMinifiedRuntime returns the minified runtime, minifying it on first use
@@ -190,15 +373,15 @@ func (sh *SvelteHandler) getMinifiedRuntime() string {
 	if !sh.config.MinifyRuntime || sh.config.DevMode {
 		return svelteRuntimeJS
 	}
-	
+
 	sh.runtimeMu.Lock()
 	defer sh.runtimeMu.Unlock()
-	
+
 	// Return cached minified runtime if available
 	if sh.runtimeMinified {
 		return sh.minifiedRuntime
 	}
-	
+
 	// Minify the runtime
 	minified, err := sh.minifier.String("application/javascript", svelteRuntimeJS)
 	if err != nil {
@@ -207,12 +390,77 @@ func (sh *SvelteHandler) getMinifiedRuntime() string {
 	} else {
 		sh.minifiedRuntime = minified
 		reduction := float64(len(svelteRuntimeJS)-len(minified)) / float64(len(svelteRuntimeJS)) * 100
-		log.Printf("Svelte runtime minified: %d bytes -> %d bytes (%.1f%% reduction)", 
+		log.Printf("Svelte runtime minified: %d bytes -> %d bytes (%.1f%% reduction)",
 			len(svelteRuntimeJS), len(minified), reduction)
 	}
-	
+
 	sh.runtimeMinified = true
 	return sh.minifiedRuntime
+}
+
+// getMinifiedVimeshStyle returns the minified Vimesh Style, minifying it on first use
+func (sh *SvelteHandler) getMinifiedVimeshStyle() string {
+	// If minification is disabled or we're in dev mode, return original
+	if !sh.config.MinifyRuntime || sh.config.DevMode {
+		return utils.GetVimeshStyleJS()
+	}
+
+	sh.vimeshMu.Lock()
+	defer sh.vimeshMu.Unlock()
+
+	// Return cached minified version if available
+	if sh.vimeshMinified {
+		return sh.minifiedVimeshStyle
+	}
+
+	// Get the original Vimesh Style JavaScript
+	vimeshJS := utils.GetVimeshStyleJS()
+
+	// Minify the Vimesh Style
+	minified, err := sh.minifier.String("application/javascript", vimeshJS)
+	if err != nil {
+		log.Printf("Failed to minify Vimesh Style: %v, using original", err)
+		sh.minifiedVimeshStyle = vimeshJS
+	} else {
+		sh.minifiedVimeshStyle = minified
+		reduction := float64(len(vimeshJS)-len(minified)) / float64(len(vimeshJS)) * 100
+		log.Printf("Vimesh Style minified: %d bytes -> %d bytes (%.1f%% reduction)",
+			len(vimeshJS), len(minified), reduction)
+	}
+
+	sh.vimeshMinified = true
+	return sh.minifiedVimeshStyle
+}
+
+// getMinifiedAsyncLibrary returns the minified async library, minifying it on first use
+func (sh *SvelteHandler) getMinifiedAsyncLibrary() string {
+	// If minification is disabled or we're in dev mode, return original
+	if !sh.config.MinifyRuntime || sh.config.DevMode {
+		return svelteAsyncJS
+	}
+
+	sh.asyncLibMu.Lock()
+	defer sh.asyncLibMu.Unlock()
+
+	// Return cached minified version if available
+	if sh.asyncLibMinified {
+		return sh.minifiedAsyncLib
+	}
+
+	// Minify the async library
+	minified, err := sh.minifier.String("application/javascript", svelteAsyncJS)
+	if err != nil {
+		log.Printf("Failed to minify async library: %v, using original", err)
+		sh.minifiedAsyncLib = svelteAsyncJS
+	} else {
+		sh.minifiedAsyncLib = minified
+		reduction := float64(len(svelteAsyncJS)-len(minified)) / float64(len(svelteAsyncJS)) * 100
+		log.Printf("Async library minified: %d bytes -> %d bytes (%.1f%% reduction)",
+			len(svelteAsyncJS), len(minified), reduction)
+	}
+
+	sh.asyncLibMinified = true
+	return sh.minifiedAsyncLib
 }
 
 // minifyComponentCode minifies the compiled component JavaScript if enabled
@@ -220,13 +468,13 @@ func (sh *SvelteHandler) minifyComponentCode(jsCode string) string {
 	if !sh.config.MinifyComponents || sh.config.DevMode {
 		return jsCode
 	}
-	
+
 	minified, err := sh.minifier.String("application/javascript", jsCode)
 	if err != nil {
 		log.Printf("Failed to minify component code: %v, using original", err)
 		return jsCode
 	}
-	
+
 	return minified
 }
 
@@ -235,13 +483,13 @@ func (sh *SvelteHandler) minifyCSS(cssCode string) string {
 	if !sh.config.MinifyCSS || sh.config.DevMode {
 		return cssCode
 	}
-	
+
 	minified, err := sh.minifier.String("text/css", cssCode)
 	if err != nil {
 		log.Printf("Failed to minify CSS: %v, using original", err)
 		return cssCode
 	}
-	
+
 	return minified
 }
 
@@ -250,13 +498,13 @@ func (sh *SvelteHandler) calculateConfigHash() string {
 	if sh.config == nil {
 		return "none"
 	}
-	
+
 	vimeshEnabled := false
 	if sh.config.VimeshStyle != nil {
 		vimeshEnabled = sh.config.VimeshStyle.Enable
 	}
-	
-	configString := fmt.Sprintf("%t_%t_%t_%t_%t_%s_%t_%s", 
+
+	configString := fmt.Sprintf("%t_%t_%t_%t_%t_%s_%t_%s",
 		sh.config.MinifyRuntime,
 		sh.config.MinifyComponents,
 		sh.config.MinifyCSS,
@@ -265,9 +513,207 @@ func (sh *SvelteHandler) calculateConfigHash() string {
 		sh.config.RuntimePath,
 		vimeshEnabled,
 		sh.config.VimeshStylePath)
-	
+
 	hash := md5.Sum([]byte(configString))
 	return hex.EncodeToString(hash[:])
+}
+
+// parseImports extracts import statements from Svelte source code
+func (sh *SvelteHandler) parseImports(source string) []string {
+	var imports []string
+
+	// Match import statements for various file types
+	// Supports: import Component from './Component.svelte'
+	// Supports: import { Component } from './Component.svelte'
+	// Supports: import styles from './styles.css'
+	// Supports: import data from '../data.json'
+	// Supports: import utils from './utils.js'
+	// Supports: import logo from '/images/logo.png'
+	importRegex := regexp.MustCompile(`import\s+(?:{[^}]+}|\w+)\s+from\s+['"]([^'"]+)['"];?`)
+	matches := importRegex.FindAllStringSubmatch(source, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			imports = append(imports, match[1])
+		}
+	}
+
+	return imports
+}
+
+// resolveComponentPath resolves a component import path relative to the current component
+func (sh *SvelteHandler) resolveComponentPath(importPath string, currentPath string) string {
+	// Handle absolute imports (starting with /)
+	if strings.HasPrefix(importPath, "/") {
+		// Remove leading slash and treat as relative to root
+		return strings.TrimPrefix(importPath, "/")
+	}
+
+	// Get the directory of the current component
+	currentDir := filepath.Dir(currentPath)
+
+	// Resolve the import path relative to the current directory
+	resolvedPath := filepath.Join(currentDir, importPath)
+
+	// Clean the path to handle .. and .
+	resolvedPath = filepath.Clean(resolvedPath)
+
+	// Ensure the resolved path doesn't escape the root directory
+	// by checking it doesn't start with ../
+	if strings.HasPrefix(resolvedPath, "../") {
+		// Security: prevent directory traversal attacks
+		return ""
+	}
+
+	return resolvedPath
+}
+
+// resolveAssetPath attempts to find an asset in various locations
+func (sh *SvelteHandler) resolveAssetPath(importPath string, currentPath string) (string, string) {
+	// For absolute imports starting with /, try public directory first
+	if strings.HasPrefix(importPath, "/") {
+		// Remove leading slash
+		trimmedPath := strings.TrimPrefix(importPath, "/")
+		
+		// Try in public directory first
+		publicPath := filepath.Join("public", trimmedPath)
+		if _, err := sh.fs.Stat(publicPath); err == nil {
+			return publicPath, sh.getAssetType(publicPath)
+		}
+		
+		// Try at root
+		if _, err := sh.fs.Stat(trimmedPath); err == nil {
+			return trimmedPath, sh.getAssetType(trimmedPath)
+		}
+		
+		// Try with routes prefix
+		routesPath := filepath.Join("routes", trimmedPath)
+		if _, err := sh.fs.Stat(routesPath); err == nil {
+			return routesPath, sh.getAssetType(routesPath)
+		}
+		
+		return "", ""
+	}
+	
+	// For relative imports, use the standard resolution
+	resolvedPath := sh.resolveComponentPath(importPath, currentPath)
+	if resolvedPath == "" {
+		return "", ""
+	}
+
+	// Try the path as-is first
+	if _, err := sh.fs.Stat(resolvedPath); err == nil {
+		return resolvedPath, sh.getAssetType(resolvedPath)
+	}
+
+	// If not found, try common asset directories
+	// Try in public directory for static assets
+	publicPath := filepath.Join("public", resolvedPath)
+	if _, err := sh.fs.Stat(publicPath); err == nil {
+		return publicPath, sh.getAssetType(publicPath)
+	}
+
+	// Try without public prefix if the import already contains it
+	if strings.HasPrefix(resolvedPath, "public/") {
+		directPath := strings.TrimPrefix(resolvedPath, "public/")
+		if _, err := sh.fs.Stat(directPath); err == nil {
+			return directPath, sh.getAssetType(directPath)
+		}
+	}
+
+	return "", ""
+}
+
+// getAssetType determines the type of asset based on file extension
+func (sh *SvelteHandler) getAssetType(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".svelte":
+		return "svelte"
+	case ".js", ".mjs":
+		return "javascript"
+	case ".css":
+		return "stylesheet"
+	case ".json":
+		return "json"
+	case ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp":
+		return "image"
+	case ".woff", ".woff2", ".ttf", ".eot":
+		return "font"
+	default:
+		return "unknown"
+	}
+}
+
+// getComponentInfo retrieves or compiles a component
+func (sh *SvelteHandler) getComponentInfo(componentPath string) (*ComponentInfo, error) {
+	// Check registry first
+	sh.registryMu.RLock()
+	info, exists := sh.componentRegistry[componentPath]
+	sh.registryMu.RUnlock()
+
+	// Check if component needs recompilation
+	if exists {
+		// Check if file has been modified
+		stat, err := sh.fs.Stat(componentPath)
+		if err == nil && !stat.ModTime().After(info.LastModified) {
+			return info, nil
+		}
+	}
+
+	// Read and compile the component
+	content, err := sh.fs.ReadFile(componentPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read component %s: %w", componentPath, err)
+	}
+
+	contentStr := string(content)
+	contentHash := sh.calculateMD5(contentStr)
+
+	// Parse imports
+	imports := sh.parseImports(contentStr)
+	dependencies := make([]string, 0)
+	
+	// Only add Svelte components as dependencies
+	for _, imp := range imports {
+		if strings.HasSuffix(imp, ".svelte") {
+			resolvedPath := sh.resolveComponentPath(imp, componentPath)
+			if resolvedPath != "" {
+				dependencies = append(dependencies, resolvedPath)
+			}
+		}
+		// Other asset types are handled during HTML generation
+	}
+
+	// Compile the component
+	result, err := sh.compileSvelte(contentStr, componentPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile component %s: %w", componentPath, err)
+	}
+
+	// Extract component name from filename
+	basename := filepath.Base(componentPath)
+	componentName := strings.TrimSuffix(basename, ".svelte")
+	className := sh.toComponentClassName(componentName)
+
+	// Create component info
+	info = &ComponentInfo{
+		FilePath:     componentPath,
+		Name:         componentName,
+		ClassName:    className,
+		CompiledJS:   result.JS,
+		CompiledCSS:  result.CSS,
+		Dependencies: dependencies,
+		LastModified: time.Now(),
+		ContentHash:  contentHash,
+	}
+
+	// Store in registry
+	sh.registryMu.Lock()
+	sh.componentRegistry[componentPath] = info
+	sh.registryMu.Unlock()
+
+	return info, nil
 }
 
 func (sh *SvelteHandler) initializeCompiler() error {
@@ -281,7 +727,7 @@ func (sh *SvelteHandler) initializeCompiler() error {
 	// Provide required globals for Svelte compiler
 	sh.vm.Set("global", sh.vm.GlobalObject())
 	sh.vm.Set("window", sh.vm.GlobalObject())
-	
+
 	_, err := sh.vm.RunString(`
 		// Polyfill performance.now() for Svelte compiler
 		if (typeof performance === 'undefined') {
@@ -381,18 +827,18 @@ func (sh *SvelteHandler) initializeCompiler() error {
 	if svelteObj == nil {
 		return fmt.Errorf("svelte object not found")
 	}
-	
+
 	// Get the compile function
 	svelteObjValue := svelteObj.ToObject(sh.vm)
 	if svelteObjValue == nil {
 		return fmt.Errorf("svelte is not an object")
 	}
-	
+
 	compileFunc := svelteObjValue.Get("compile")
 	if compileFunc == nil {
 		return fmt.Errorf("svelte.compile not found")
 	}
-	
+
 	callable, ok := goja.AssertFunction(compileFunc)
 	if !ok {
 		return fmt.Errorf("svelte.compile is not a function")
@@ -406,7 +852,7 @@ func (sh *SvelteHandler) initializeCompiler() error {
 func (sh *SvelteHandler) compileSvelte(source string, filename string) (*SvelteCompileResult, error) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
-	
+
 	if err := sh.initializeCompiler(); err != nil {
 		return nil, err
 	}
@@ -430,7 +876,7 @@ func (sh *SvelteHandler) compileSvelte(source string, filename string) (*SvelteC
 	if resultObj == nil {
 		return nil, fmt.Errorf("compilation returned nil result")
 	}
-	
+
 	js := ""
 	if jsValue := resultObj.Get("js"); jsValue != nil {
 		if jsObj := jsValue.ToObject(sh.vm); jsObj != nil {
@@ -467,21 +913,54 @@ func (sh *SvelteHandler) Handle(route Route) http.HandlerFunc {
 		contentHash := sh.calculateMD5(contentStr)
 		configHash := sh.calculateConfigHash()
 
+		// Collect all dependencies
+		allComponents, err := sh.collectAllDependencies(route.FilePath, nil)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to collect dependencies: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Check if any dependency has changed
+		dependenciesChanged := false
+		var dependencies []string
+		for _, comp := range allComponents {
+			dependencies = append(dependencies, comp.FilePath)
+			// Check if this component has been modified
+			stat, err := sh.fs.Stat(comp.FilePath)
+			if err == nil && stat.ModTime().After(comp.LastModified) {
+				dependenciesChanged = true
+				break
+			}
+		}
+
 		// Check cache first
 		sh.cacheMu.RLock()
 		cached, exists := sh.cache[route.FilePath]
 		sh.cacheMu.RUnlock()
 
-		// If cached and both content hash and config match, return cached HTML
-		if exists && cached.ContentHash == contentHash && cached.ConfigHash == configHash {
-			log.Printf("Serving cached Svelte component: %s (hash: %s)", route.FilePath, contentHash)
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("X-Svelte-Cached", "true")
-			w.Write([]byte(cached.HTML))
-			return
+		// If cached and both content hash and config match, and no dependencies changed
+		if exists && cached.ContentHash == contentHash && cached.ConfigHash == configHash && !dependenciesChanged {
+			// Verify all dependencies are still the same
+			sameDepenencies := len(cached.Dependencies) == len(dependencies)
+			if sameDepenencies {
+				for i, dep := range cached.Dependencies {
+					if i >= len(dependencies) || dep != dependencies[i] {
+						sameDepenencies = false
+						break
+					}
+				}
+			}
+
+			if sameDepenencies {
+				log.Printf("Serving cached Svelte component: %s (hash: %s)", route.FilePath, contentHash)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("X-Svelte-Cached", "true")
+				w.Write([]byte(cached.HTML))
+				return
+			}
 		}
 
-		log.Printf("Compiling Svelte component: %s (hash: %s)", route.FilePath, contentHash)
+		log.Printf("Compiling Svelte component: %s (hash: %s) with %d dependencies", route.FilePath, contentHash, len(allComponents)-1)
 
 		// Compile the Svelte component
 		result, err := sh.compileSvelte(contentStr, route.FilePath)
@@ -490,15 +969,16 @@ func (sh *SvelteHandler) Handle(route Route) http.HandlerFunc {
 			return
 		}
 
-		// Generate HTML response with embedded runtime
-		html := sh.generateHTMLWithRuntime(result, filepath.Base(route.FilePath), contentStr)
+		// Generate HTML response with embedded runtime and all dependencies
+		html := sh.generateHTMLWithRuntime(result, filepath.Base(route.FilePath), contentStr, allComponents, route.FilePath)
 
-		// Cache the result with MD5 hash and config
+		// Cache the result with MD5 hash, config, and dependencies
 		sh.cacheMu.Lock()
 		sh.cache[route.FilePath] = &CachedResult{
-			HTML:        html,
-			ContentHash: contentHash,
-			ConfigHash:  configHash,
+			HTML:         html,
+			ContentHash:  contentHash,
+			ConfigHash:   configHash,
+			Dependencies: dependencies,
 		}
 		sh.cacheMu.Unlock()
 
@@ -522,56 +1002,187 @@ func (sh *SvelteHandler) calculateMD5(content string) string {
 func (sh *SvelteHandler) toComponentClassName(componentName string) string {
 	// Replace hyphens with underscores
 	className := strings.ReplaceAll(componentName, "-", "_")
-	
+
 	// Capitalize the first letter
 	if len(className) > 0 {
 		className = strings.ToUpper(className[:1]) + className[1:]
 	}
-	
+
 	return className
 }
 
-func (sh *SvelteHandler) transformToIIFE(jsCode string, componentClassName string) string {
+// collectAllDependencies recursively collects all component dependencies
+func (sh *SvelteHandler) collectAllDependencies(componentPath string, visited map[string]bool) ([]*ComponentInfo, error) {
+	if visited == nil {
+		visited = make(map[string]bool)
+	}
+
+	// Avoid circular dependencies
+	if visited[componentPath] {
+		return nil, nil
+	}
+	visited[componentPath] = true
+
+	// Get component info
+	info, err := sh.getComponentInfo(componentPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var allComponents []*ComponentInfo
+
+	// Process dependencies first (for proper load order)
+	for _, dep := range info.Dependencies {
+		depComponents, err := sh.collectAllDependencies(dep, visited)
+		if err != nil {
+			return nil, err
+		}
+		allComponents = append(allComponents, depComponents...)
+	}
+
+	// Add this component last
+	allComponents = append(allComponents, info)
+
+	return allComponents, nil
+}
+
+// transformToIIFE transforms ES6 module code to IIFE, preserving imports for resolution
+func (sh *SvelteHandler) transformToIIFE(jsCode string, componentClassName string, imports map[string]string, componentPath string) string {
+	// Extract all import information before removing them
+	importRegex := regexp.MustCompile(`import\s+(\w+)\s+from\s+["']([^"']+)["'];?\s*`)
+	matches := importRegex.FindAllStringSubmatch(jsCode, -1)
+
+	// Build import mappings and handle non-Svelte imports
+	for _, match := range matches {
+		if len(match) >= 3 {
+			importName := match[1]
+			importPath := match[2]
+			
+			if strings.HasSuffix(importPath, ".svelte") {
+				// Svelte components are handled via component registry
+				imports[importName] = importPath
+			} else {
+				// Other assets need URL resolution
+				assetPath, assetType := sh.resolveAssetPath(importPath, componentPath)
+				if assetPath != "" && assetType != "unknown" {
+					// Replace import with URL or inline content based on type
+					jsCode = sh.replaceAssetImport(jsCode, importName, importPath, assetPath, assetType)
+				} else {
+					log.Printf("Warning: Could not resolve asset import '%s' from '%s'", importPath, componentPath)
+				}
+			}
+		}
+	}
+
 	// Remove all types of import statements
 	importRegex1 := regexp.MustCompile(`import\s*{[^}]+}\s*from\s*["'][^"']+["'];?\s*`)
 	jsCode = importRegex1.ReplaceAllString(jsCode, "")
-	
+
 	importRegex2 := regexp.MustCompile(`import\s+\w+\s+from\s*["'][^"']+["'];?\s*`)
 	jsCode = importRegex2.ReplaceAllString(jsCode, "")
-	
+
 	importRegex3 := regexp.MustCompile(`import\s*["'][^"']+["'];?\s*`)
 	jsCode = importRegex3.ReplaceAllString(jsCode, "")
-	
+
 	// Remove export default statement - handle both forms:
 	// 1. export default ComponentName;
 	// 2. export default ComponentName at end of file
 	exportRegex1 := regexp.MustCompile(`export\s+default\s+` + componentClassName + `\s*;?\s*$`)
 	jsCode = exportRegex1.ReplaceAllString(jsCode, "")
-	
+
 	// Also handle any remaining export default statements
 	exportRegex2 := regexp.MustCompile(`export\s+default\s+\w+\s*;?\s*$`)
 	jsCode = exportRegex2.ReplaceAllString(jsCode, "")
-	
+
 	return jsCode
 }
 
-func (sh *SvelteHandler) generateHTMLWithRuntime(result *SvelteCompileResult, componentName string, svelteSource string) string {
+// replaceAssetImport handles non-Svelte asset imports
+func (sh *SvelteHandler) replaceAssetImport(jsCode, importName, importPath, assetPath, assetType string) string {
+	var replacement string
+	
+	// Generate the public URL for the asset
+	publicURL := sh.getPublicURL(assetPath)
+	
+	switch assetType {
+	case "image", "font":
+		// For images and fonts, replace with URL string
+		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+	case "stylesheet":
+		// For CSS, we could inject a link tag or return URL
+		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+	case "javascript":
+		// For JS modules, this is more complex - for now just provide URL
+		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+	case "json":
+		// For JSON, try to inline the content if it's not too large
+		const maxJSONSize = 100 * 1024 // 100KB limit
+		
+		// Try to read the JSON file
+		jsonData, err := sh.fs.ReadFile(assetPath)
+		if err != nil {
+			// If we can't read it, fall back to URL
+			log.Printf("Warning: Could not read JSON file '%s': %v", assetPath, err)
+			replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+		} else if len(jsonData) > maxJSONSize {
+			// If file is too large, use URL instead
+			log.Printf("JSON file '%s' is too large (%d bytes), using URL instead", assetPath, len(jsonData))
+			replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+		} else {
+			// Validate JSON
+			var jsonObj interface{}
+			if err := json.Unmarshal(jsonData, &jsonObj); err != nil {
+				log.Printf("Warning: Invalid JSON in file '%s': %v", assetPath, err)
+				replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+			} else {
+				// Inline the JSON data
+				replacement = fmt.Sprintf("const %s = %s;", importName, string(jsonData))
+			}
+		}
+	default:
+		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
+	}
+	
+	// Replace the specific import statement
+	importPattern := fmt.Sprintf(`import\s+%s\s+from\s+["']%s["'];?\s*`, importName, regexp.QuoteMeta(importPath))
+	re := regexp.MustCompile(importPattern)
+	return re.ReplaceAllString(jsCode, replacement+"\n")
+}
+
+// getPublicURL converts a filesystem path to a public URL
+func (sh *SvelteHandler) getPublicURL(assetPath string) string {
+	// Remove public/ prefix if present
+	if strings.HasPrefix(assetPath, "public/") {
+		return "/" + strings.TrimPrefix(assetPath, "public/")
+	}
+	// For paths in routes/, we might need different handling
+	if strings.HasPrefix(assetPath, "routes/") {
+		return "/" + strings.TrimPrefix(assetPath, "routes/")
+	}
+	// Default: assume it's relative to root
+	return "/" + assetPath
+}
+
+func (sh *SvelteHandler) generateHTMLWithRuntime(result *SvelteCompileResult, componentName string, svelteSource string, allComponents []*ComponentInfo, componentPath string) string {
 	// Remove .svelte extension
 	componentName = strings.TrimSuffix(componentName, ".svelte")
-	
+
 	// Convert component name to class name format (handle hyphens)
 	// vimesh-test -> Vimesh_test
 	componentClassName := sh.toComponentClassName(componentName)
-	
+
+	// Build import mappings for main component
+	imports := make(map[string]string)
+
 	// Transform the ES6 module code to IIFE
-	jsCode := sh.transformToIIFE(result.JS, componentClassName)
-	
+	jsCode := sh.transformToIIFE(result.JS, componentClassName, imports, componentPath)
+
 	// Minify component code if enabled (only the component code, not mounting logic)
 	jsCode = sh.minifyComponentCode(jsCode)
-	
+
 	// Minify CSS if enabled
 	css := sh.minifyCSS(result.CSS)
-	
+
 	// Extract Vimesh Style CSS if enabled
 	var vimeshCSS string
 	var vimeshScript string
@@ -586,7 +1197,13 @@ func (sh *SvelteHandler) generateHTMLWithRuntime(result *SvelteCompileResult, co
 			vimeshScript = fmt.Sprintf(`<script src="%s"></script>`, sh.config.VimeshStylePath)
 		}
 	}
-	
+
+	// Add async library script if enabled
+	var asyncScript string
+	if sh.config.EnableAsyncLoading {
+		asyncScript = fmt.Sprintf(`<script src="%s"></script>`, sh.config.AsyncLibraryPath)
+	}
+
 	var runtimeScript string
 	if sh.config.UseExternalRuntime {
 		// Use external runtime script
@@ -603,36 +1220,107 @@ func (sh *SvelteHandler) generateHTMLWithRuntime(result *SvelteCompileResult, co
         %s
     </script>`, runtimeComment, runtime)
 	}
-	
-	componentComment := "// Component code"
+
+	// Collect all CSS from dependencies
+	var allCSS strings.Builder
+	allCSS.WriteString(css) // Main component CSS
+
+	// Collect all JS from dependencies and create component registry
+	var allJS strings.Builder
+	var componentRegistry strings.Builder
+	componentRegistry.WriteString("// Component registry\n")
+	componentRegistry.WriteString("const __svelteComponents = {};\n\n")
+
+	// Process dependencies first (they're already in correct order)
+	for _, dep := range allComponents {
+		if dep.ClassName == componentClassName {
+			continue // Skip main component, we'll add it last
+		}
+
+		// Add CSS
+		if dep.CompiledCSS != "" {
+			allCSS.WriteString("\n/* Component: " + dep.Name + " */\n")
+			allCSS.WriteString(sh.minifyCSS(dep.CompiledCSS))
+		}
+
+		// Transform and add JS
+		depImports := make(map[string]string)
+		depJS := sh.transformToIIFE(dep.CompiledJS, dep.ClassName, depImports, dep.FilePath)
+		depJS = sh.minifyComponentCode(depJS)
+
+		allJS.WriteString("// Component: " + dep.Name + "\n")
+		allJS.WriteString("(function() {\n")
+
+		// Add import references at the beginning of the component scope
+		for importName, importPath := range depImports {
+			resolvedPath := sh.resolveComponentPath(importPath, dep.FilePath)
+			depInfo, _ := sh.getComponentInfo(resolvedPath)
+			if depInfo != nil {
+				allJS.WriteString("  const " + importName + " = __svelteComponents['" + depInfo.ClassName + "'];\n")
+			}
+		}
+
+		allJS.WriteString(depJS)
+		allJS.WriteString("\n  __svelteComponents['" + dep.ClassName + "'] = " + dep.ClassName + ";\n")
+		allJS.WriteString("})();\n\n")
+	}
+
+	componentComment := "// Main component code"
 	if sh.config.MinifyComponents && !sh.config.DevMode {
 		componentComment += " (minified)"
 	}
-	
+
 	html := `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>` + componentName + `</title>
-    <style>` + css + `</style>
+    <style>` + allCSS.String() + `</style>
     ` + vimeshCSS + `
     ` + vimeshScript + `
+    ` + asyncScript + `
 </head>
 <body>
     <div id="app"></div>
     ` + runtimeScript + `
     <script>
+        ` + componentRegistry.String() + `
+        ` + allJS.String() + `
         ` + componentComment + `
-        ` + jsCode + `
-        
-        // Mount the component
-        const app = new ` + componentClassName + `({
-            target: document.getElementById('app'),
-            props: {}
-        });
-        
-        // Make it available globally for debugging
-        window.svelteApp = app;
+        (function() {
+            // Import references for main component
+`
+	// Add import references for main component
+	for importName, importPath := range imports {
+		// Find the main component's file path from allComponents
+		var mainComponentPath string
+		for _, comp := range allComponents {
+			if comp.ClassName == componentClassName {
+				mainComponentPath = comp.FilePath
+				break
+			}
+		}
+
+		if mainComponentPath != "" {
+			resolvedPath := sh.resolveComponentPath(importPath, mainComponentPath)
+			depInfo, _ := sh.getComponentInfo(resolvedPath)
+			if depInfo != nil {
+				html += "            const " + importName + " = __svelteComponents['" + depInfo.ClassName + "'];\n"
+			}
+		}
+	}
+
+	html += `            ` + jsCode + `
+            
+            // Mount the component
+            const app = new ` + componentClassName + `({
+                target: document.getElementById('app'),
+                props: {}
+            });
+            
+            // Make it available globally for debugging
+            window.svelteApp = app;
+        })();
     </script>
 </body>
 </html>`

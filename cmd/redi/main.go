@@ -73,11 +73,13 @@ func main() {
 	currentVersion := versionProvider.GetVersion()
 
 	config := &server.Config{
-		Root:    root,
-		Port:    port,
-		Version: currentVersion,
-		LogFile: logFile,
-		Daemon:  daemon,
+		Root:       root,
+		Port:       port,
+		Version:    currentVersion,
+		LogFile:    logFile,
+		Daemon:     daemon,
+		EnableGzip: true,
+		GzipLevel:  -1, // Use gzip.DefaultCompression
 	}
 
 	launcher := server.NewLauncher()

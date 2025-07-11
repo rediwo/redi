@@ -935,6 +935,20 @@
         ? globalThis
         : global;
     
+    // construct_svelte_component - used by <svelte:component> directive
+    function construct_svelte_component(component, props) {
+        return new component({
+            props: props,
+            $$inline: true
+        });
+    }
+    
+    // construct_svelte_component_dev - development version
+    function construct_svelte_component_dev(component, props) {
+        const instance = construct_svelte_component(component, props);
+        return instance;
+    }
+    
     // Export everything globally
     const exports = {
         SvelteComponent,
@@ -998,6 +1012,8 @@
         check_outros,
         group_outros,
         create_component,
+        construct_svelte_component,
+        construct_svelte_component_dev,
         ensure_array_like,
         update_keyed_each,
         destroy_block,

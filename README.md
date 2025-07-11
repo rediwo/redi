@@ -9,7 +9,7 @@ Redi is a Go-based web development toolkit that provides a dynamic web server (`
 - **JavaScript API Endpoints**: Execute `.js` files server-side for API routes
 - **HTML Template Rendering**: Process `.html` files with Go templates and server-side JavaScript
 - **Markdown Support**: Automatic `.md` to HTML conversion with Goldmark parser
-- **Svelte Support**: Server-side Svelte compilation with automatic runtime injection
+- **Svelte Support**: Server-side Svelte compilation with automatic runtime injection and enhanced import system
 - **Template Layouts**: Nested layouts with `{{layout 'name'}}` syntax
 - **Background Mode**: Run server as daemon with `--log` parameter (nohup-like behavior)
 - **Session-based VM Management**: Consistent JavaScript state across requests per client
@@ -17,6 +17,7 @@ Redi is a Go-based web development toolkit that provides a dynamic web server (`
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **JavaScript Engine Pooling**: High-performance concurrent request handling
 - **Vimesh Style Integration**: Lightweight CSS generation for Svelte components
+- **Gzip Compression**: Automatic response compression for better performance
 
 ### Rejs JavaScript Runtime
 - **Node.js Compatible**: Supports CommonJS modules and npm packages
@@ -121,6 +122,13 @@ mysite/
 **routes/hello.svelte:** (Svelte component example)
 ```svelte
 <script>
+    // Import other components
+    import Button from './Button.svelte';
+    
+    // Import assets (transforms to URL strings)
+    import styles from '/css/style.css';
+    import logo from '/images/logo.svg';
+    
     export let name = 'World';
     let count = 0;
     
@@ -137,14 +145,17 @@ mysite/
     }
 </style>
 
+<svelte:head>
+    <link rel="stylesheet" href={styles}>
+</svelte:head>
+
 <div class="container mx-auto p-8">
+    <img src={logo} alt="Logo" class="w-16 h-16 mb-4">
     <h1 class="greeting">Hello {name}!</h1>
     <p class="text-gray-600">You've clicked {count} times</p>
-    <button 
-        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-        on:click={increment}>
+    <Button on:click={increment}>
         Click me
-    </button>
+    </Button>
 </div>
 ```
 
@@ -708,9 +719,65 @@ res.render({
 <h1>Page Content</h1>
 ```
 
-### Svelte Components with Vimesh Style
+### Svelte Components with Enhanced Import System
 
-Redi provides built-in support for Svelte components with automatic server-side compilation:
+Redi provides built-in support for Svelte components with automatic server-side compilation and enhanced import capabilities:
+
+#### Enhanced Import Features
+- **Asset Imports**: Import CSS, images, and fonts as URL strings
+- **JSON Imports**: Import JSON files as JavaScript objects (automatically inlined for files < 100KB)
+- **Automatic Transformation**: Non-Svelte imports are intelligently transformed
+- **Flexible Path Resolution**: Supports relative and absolute imports
+- **No Build Step**: All imports are resolved and transformed at runtime
+
+**Example with imports:**
+```svelte
+<script>
+    // Import Svelte components (works as before)
+    import Card from './Card.svelte';
+    import Button from '../shared/Button.svelte';
+    
+    // Import CSS (transforms to URL string)
+    import styles from './component.css';
+    
+    // Import images (transforms to URL string)
+    import logo from '/images/logo.svg';
+    import heroImage from './assets/hero.jpg';
+    
+    // Import JSON data (transforms to JavaScript object)
+    import config from './config.json';
+    
+    // Import fonts (transforms to URL string)
+    import customFont from '/fonts/custom.woff2';
+    
+    // Use the imported assets
+    console.log('Styles URL:', styles);  // '/component.css'
+    console.log('Logo URL:', logo);      // '/images/logo.svg'
+    
+    // JSON data is directly available - no fetch needed!
+    console.log('Config:', config);      // {name: "app", version: "1.0.0", ...}
+    console.log('App name:', config.name);
+</script>
+
+<svelte:head>
+    <link rel="stylesheet" href={styles}>
+    <style>
+        @font-face {
+            font-family: 'CustomFont';
+            src: url({customFont}) format('woff2');
+        }
+    </style>
+</svelte:head>
+
+<main>
+    <img src={logo} alt="Logo">
+    <img src={heroImage} alt="Hero">
+    <Card />
+    <Button>Click me</Button>
+</main>
+```
+
+### Svelte Components with Vimesh Style
 
 **Configuration (in your server setup):**
 ```go

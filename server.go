@@ -1,6 +1,7 @@
 package redi
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io/fs"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/rediwo/redi/filesystem"
 )
@@ -19,6 +21,8 @@ type Server struct {
 	httpServer     *http.Server
 	version        string
 	handlerManager *HandlerManager
+	enableGzip     bool
+	gzipLevel      int
 }
 
 func NewServer(root string, port int) *Server {
@@ -31,19 +35,35 @@ func NewServerWithFS(embedFS fs.FS, port int) *Server {
 
 func NewServerWithVersion(root string, port int, version string) *Server {
 	return &Server{
-		port:    port,
-		router:  mux.NewRouter(),
-		fs:      filesystem.NewOSFileSystem(root),
-		version: version,
+		port:       port,
+		router:     mux.NewRouter(),
+		fs:         filesystem.NewOSFileSystem(root),
+		version:    version,
+		enableGzip: true,
+		gzipLevel:  gzip.DefaultCompression,
 	}
 }
 
 func NewServerWithFSAndVersion(embedFS fs.FS, port int, version string) *Server {
 	return &Server{
-		port:    port,
-		router:  mux.NewRouter(),
-		fs:      filesystem.NewEmbedFileSystem(embedFS),
-		version: version,
+		port:       port,
+		router:     mux.NewRouter(),
+		fs:         filesystem.NewEmbedFileSystem(embedFS),
+		version:    version,
+		enableGzip: true,
+		gzipLevel:  gzip.DefaultCompression,
+	}
+}
+
+// SetGzipEnabled configures whether gzip compression is enabled
+func (s *Server) SetGzipEnabled(enabled bool) {
+	s.enableGzip = enabled
+}
+
+// SetGzipLevel sets the gzip compression level (-1 to 9)
+func (s *Server) SetGzipLevel(level int) {
+	if level >= -1 && level <= 9 {
+		s.gzipLevel = level
 	}
 }
 
@@ -59,10 +79,23 @@ func (s *Server) Start() error {
 	
 	s.setupStaticFileServer()
 
+	// Apply middleware
+	handler := http.Handler(s.router)
+	
+	// Apply gzip compression if enabled
+	if s.enableGzip {
+		if s.gzipLevel == gzip.DefaultCompression {
+			handler = handlers.CompressHandler(handler)
+		} else {
+			handler = handlers.CompressHandlerLevel(handler, s.gzipLevel)
+		}
+		log.Printf("Gzip compression enabled (level: %d)", s.gzipLevel)
+	}
+
 	addr := fmt.Sprintf(":%d", s.port)
 	s.httpServer = &http.Server{
 		Addr:    addr,
-		Handler: s.router,
+		Handler: handler,
 	}
 	
 	log.Printf("Server listening on %s", addr)

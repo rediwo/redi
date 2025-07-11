@@ -12,4 +12,6 @@ type FileSystem interface {
 	GetFS() fs.FS
 	// IsReadOnly returns whether the file system is read-only
 	IsReadOnly() bool
+	// GetRoot returns the root directory path for this filesystem
+	GetRoot() string
 }

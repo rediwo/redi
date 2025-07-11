@@ -302,7 +302,7 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 	
 	// Test 1: Vimesh Style JavaScript route
 	t.Run("VimeshStyleJSRoute", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/svelte-vimesh-style.js", nil)
+		req := httptest.NewRequest("GET", config.VimeshStylePath, nil)
 		w := httptest.NewRecorder()
 		
 		router.ServeHTTP(w, req)
@@ -329,7 +329,7 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 	
 	// Test 2: Svelte Runtime route
 	t.Run("SvelteRuntimeRoute", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/svelte-runtime.js", nil)
+		req := httptest.NewRequest("GET", config.RuntimePath, nil)
 		w := httptest.NewRecorder()
 		
 		router.ServeHTTP(w, req)
@@ -368,7 +368,7 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 		}
 		
 		// Check for Vimesh Style script tag
-		if !strings.Contains(body, "/svelte-vimesh-style.js") {
+		if !strings.Contains(body, config.VimeshStylePath) {
 			t.Error("Component should include Vimesh Style script tag")
 		}
 		
@@ -388,7 +388,7 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 	
 	// Test 4: Caching headers
 	t.Run("CachingHeaders", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/svelte-vimesh-style.js", nil)
+		req := httptest.NewRequest("GET", config.VimeshStylePath, nil)
 		w := httptest.NewRecorder()
 		
 		router.ServeHTTP(w, req)
@@ -406,7 +406,7 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 		}
 		
 		// Test conditional request
-		req2 := httptest.NewRequest("GET", "/svelte-vimesh-style.js", nil)
+		req2 := httptest.NewRequest("GET", config.VimeshStylePath, nil)
 		req2.Header.Set("If-None-Match", etag)
 		w2 := httptest.NewRecorder()
 		
@@ -489,7 +489,8 @@ func TestSvelteHandler_VimeshStyleDisabled(t *testing.T) {
 // Tests from svelte_transform_test.go
 
 func TestTransformToIIFE(t *testing.T) {
-	sh := &SvelteHandler{}
+	fs := filesystem.NewMemoryFileSystem()
+	sh := NewSvelteHandler(fs)
 	
 	tests := []struct {
 		name           string
@@ -565,7 +566,8 @@ export default Component;`,
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sh.transformToIIFE(tt.jsCode, tt.componentName)
+			imports := make(map[string]string)
+			result := sh.transformToIIFE(tt.jsCode, tt.componentName, imports, "routes/test.svelte")
 			
 			// Check that required content is present
 			for _, expected := range tt.shouldContain {
@@ -613,6 +615,53 @@ func TestToComponentClassName(t *testing.T) {
 			result := sh.toComponentClassName(tt.input)
 			if result != tt.expected {
 				t.Errorf("toComponentClassName(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestVimeshStyleMinification(t *testing.T) {
+	fs := filesystem.NewMemoryFileSystem()
+	
+	testCases := []struct {
+		name           string
+		minifyEnabled  bool
+		devMode        bool
+		expectMinified bool
+	}{
+		{"Minification enabled", true, false, true},
+		{"Minification disabled", false, false, false},
+		{"Dev mode enabled", true, true, false},
+		{"Both disabled", false, true, false},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := DefaultSvelteConfig()
+			config.MinifyRuntime = tc.minifyEnabled
+			config.DevMode = tc.devMode
+			config.VimeshStyle = &utils.VimeshStyleConfig{Enable: true}
+			
+			handler := NewSvelteHandlerWithConfig(fs, config)
+			vimeshJS := handler.getMinifiedVimeshStyle()
+			
+			originalSize := len(utils.GetVimeshStyleJS())
+			minifiedSize := len(vimeshJS)
+			
+			if tc.expectMinified {
+				if minifiedSize >= originalSize {
+					t.Errorf("Expected minified version to be smaller: original=%d, minified=%d", 
+						originalSize, minifiedSize)
+				}
+				// Should have some reasonable compression
+				reduction := float64(originalSize-minifiedSize) / float64(originalSize) * 100
+				if reduction < 10 { // Expect at least 10% reduction
+					t.Errorf("Expected better compression, got only %.1f%% reduction", reduction)
+				}
+			} else {
+				if minifiedSize != originalSize {
+					t.Errorf("Expected original size %d, got %d", originalSize, minifiedSize)
+				}
 			}
 		})
 	}

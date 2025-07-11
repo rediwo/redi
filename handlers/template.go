@@ -154,10 +154,26 @@ func (th *TemplateHandler) processLayouts(content string) (string, error) {
 		}
 
 		layoutName := matches[1]
-		layoutPath := filepath.Join("routes", "_layout", layoutName+".html")
-
-		layoutContent, err := th.fs.ReadFile(layoutPath)
-		if err != nil {
+		// Try to find layout in multiple locations
+		// First try _layout directory relative to the template
+		layoutPaths := []string{
+			filepath.Join("_layout", layoutName+".html"),
+			filepath.Join("routes", "_layout", layoutName+".html"), // Keep for compatibility
+		}
+		
+		var layoutContent []byte
+		var err error
+		var found bool
+		
+		for _, layoutPath := range layoutPaths {
+			layoutContent, err = th.fs.ReadFile(layoutPath)
+			if err == nil {
+				found = true
+				break
+			}
+		}
+		
+		if !found {
 			return "", fmt.Errorf("layout file not found: %s", layoutName)
 		}
 

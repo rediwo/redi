@@ -58,3 +58,7 @@ func (osfs *OSFileSystem) GetFS() fs.FS {
 func (osfs *OSFileSystem) IsReadOnly() bool {
 	return false
 }
+
+func (osfs *OSFileSystem) GetRoot() string {
+	return osfs.root
+}
