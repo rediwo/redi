@@ -1,6 +1,6 @@
 <script>
-    import Card from './Card.svelte';
-    import Button from './Button.svelte';
+    import Card from './_lib/Card.svelte';
+    import Button from './_lib/Button.svelte';
     
     const cards = [
         {

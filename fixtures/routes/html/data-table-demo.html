@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Table Demo - HTML Template</title>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8">
+            <a href="/html" class="text-blue-600 hover:text-blue-800 mb-4 inline-block">← Back to HTML Demos</a>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Data Table Demo</h1>
+            <p class="text-gray-600">Interactive data table with sorting, filtering, and pagination</p>
+        </header>
+
+        <section class="bg-white rounded-lg shadow-md p-6">
+            <!-- Search and filter controls -->
+            <div class="mb-6 flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                    <input
+                        type="text"
+                        id="searchInput"
+                        placeholder="Search by name or email..."
+                        onkeyup="filterData()"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                </div>
+                <div class="flex gap-2">
+                    <select
+                        id="statusFilter"
+                        onchange="filterData()"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                    <select
+                        id="pageSize"
+                        onchange="changePageSize()"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="10">10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Data table -->
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-gray-100 border-b">
+                            <th class="px-4 py-3 text-left">
+                                <button onclick="sortData('id')" class="font-semibold text-gray-700 hover:text-blue-600 flex items-center gap-1">
+                                    ID <span id="sort-id" class="sort-icon">↕</span>
+                                </button>
+                            </th>
+                            <th class="px-4 py-3 text-left">
+                                <button onclick="sortData('name')" class="font-semibold text-gray-700 hover:text-blue-600 flex items-center gap-1">
+                                    Name <span id="sort-name" class="sort-icon">↕</span>
+                                </button>
+                            </th>
+                            <th class="px-4 py-3 text-left">
+                                <button onclick="sortData('email')" class="font-semibold text-gray-700 hover:text-blue-600 flex items-center gap-1">
+                                    Email <span id="sort-email" class="sort-icon">↕</span>
+                                </button>
+                            </th>
+                            <th class="px-4 py-3 text-left">
+                                <button onclick="sortData('status')" class="font-semibold text-gray-700 hover:text-blue-600 flex items-center gap-1">
+                                    Status <span id="sort-status" class="sort-icon">↕</span>
+                                </button>
+                            </th>
+                            <th class="px-4 py-3 text-left">
+                                <button onclick="sortData('created')" class="font-semibold text-gray-700 hover:text-blue-600 flex items-center gap-1">
+                                    Created <span id="sort-created" class="sort-icon">↕</span>
+                                </button>
+                            </th>
+                            <th class="px-4 py-3 text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Table rows will be dynamically added here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="mt-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="text-gray-600">
+                    Showing <span id="startItem">1</span> to <span id="endItem">10</span> of <span id="totalItems">0</span> entries
+                </div>
+                <div class="flex gap-2" id="pagination">
+                    <!-- Pagination buttons will be dynamically added here -->
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h3 class="text-lg font-semibold text-gray-700 mb-3">About This Demo</h3>
+            <p class="text-gray-600">
+                This data table demonstrates advanced client-side data manipulation including sorting,
+                filtering, searching, and pagination. The data is generated dynamically and all
+                operations are performed in the browser.
+            </p>
+        </section>
+    </div>
+
+    <script>
+        // Generate sample data
+        const statuses = ['active', 'inactive', 'pending'];
+        const firstNames = ['John', 'Jane', 'Bob', 'Alice', 'Charlie', 'Diana', 'Edward', 'Fiona', 'George', 'Helen'];
+        const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
+
+        let allData = [];
+        for (let i = 1; i <= 150; i++) {
+            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+            const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+            allData.push({
+                id: i,
+                name: `${firstName} ${lastName}`,
+                email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
+                status: statuses[Math.floor(Math.random() * statuses.length)],
+                created: new Date(Date.now() - Math.floor(Math.random() * 90) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            });
+        }
+
+        // State management
+        let filteredData = [...allData];
+        let currentPage = 1;
+        let pageSize = 10;
+        let sortColumn = null;
+        let sortDirection = 'asc';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderTable();
+        });
+
+        // Sort data
+        function sortData(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+
+            // Update sort icons
+            document.querySelectorAll('.sort-icon').forEach(icon => {
+                icon.textContent = '↕';
+            });
+            const icon = document.getElementById(`sort-${column}`);
+            icon.textContent = sortDirection === 'asc' ? '↑' : '↓';
+
+            // Sort the data
+            filteredData.sort((a, b) => {
+                let aVal = a[column];
+                let bVal = b[column];
+
+                if (column === 'id') {
+                    aVal = parseInt(aVal);
+                    bVal = parseInt(bVal);
+                }
+
+                if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            currentPage = 1;
+            renderTable();
+        }
+
+        // Filter data
+        function filterData() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            filteredData = allData.filter(item => {
+                const matchesSearch = !searchTerm || 
+                    item.name.toLowerCase().includes(searchTerm) ||
+                    item.email.toLowerCase().includes(searchTerm);
+                
+                const matchesStatus = !statusFilter || item.status === statusFilter;
+
+                return matchesSearch && matchesStatus;
+            });
+
+            currentPage = 1;
+            renderTable();
+        }
+
+        // Change page size
+        function changePageSize() {
+            pageSize = parseInt(document.getElementById('pageSize').value);
+            currentPage = 1;
+            renderTable();
+        }
+
+        // Go to page
+        function goToPage(page) {
+            currentPage = page;
+            renderTable();
+        }
+
+        // Render table
+        function renderTable() {
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filteredData.length);
+            const pageData = filteredData.slice(startIndex, endIndex);
+
+            // Render table body
+            const tableBody = document.getElementById('tableBody');
+            if (pageData.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-500">No data to display</td></tr>';
+            } else {
+                tableBody.innerHTML = pageData.map(item => `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-3">${item.id}</td>
+                        <td class="px-4 py-3 font-medium">${item.name}</td>
+                        <td class="px-4 py-3">${item.email}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs rounded-full ${
+                                item.status === 'active' ? 'bg-green-100 text-green-800' :
+                                item.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                                'bg-yellow-100 text-yellow-800'
+                            }">
+                                ${item.status}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">${item.created}</td>
+                        <td class="px-4 py-3 text-center">
+                            <button onclick="editItem(${item.id})" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
+                            <button onclick="deleteItem(${item.id})" class="text-red-600 hover:text-red-800">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            // Update pagination info
+            document.getElementById('startItem').textContent = startIndex + 1;
+            document.getElementById('endItem').textContent = endIndex;
+            document.getElementById('totalItems').textContent = filteredData.length;
+
+            // Render pagination buttons
+            renderPagination();
+        }
+
+        // Render pagination
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredData.length / pageSize);
+            const pagination = document.getElementById('pagination');
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+
+            // Previous button
+            html += `
+                <button
+                    onclick="goToPage(${currentPage - 1})"
+                    class="px-3 py-1 rounded border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50 text-gray-700'}"
+                    ${currentPage === 1 ? 'disabled' : ''}
+                >
+                    Previous
+                </button>
+            `;
+
+            // Page numbers
+            const maxButtons = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                html += `
+                    <button
+                        onclick="goToPage(${i})"
+                        class="px-3 py-1 rounded border ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-white hover:bg-gray-50 text-gray-700'}"
+                    >
+                        ${i}
+                    </button>
+                `;
+            }
+
+            // Next button
+            html += `
+                <button
+                    onclick="goToPage(${currentPage + 1})"
+                    class="px-3 py-1 rounded border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50 text-gray-700'}"
+                    ${currentPage === totalPages ? 'disabled' : ''}
+                >
+                    Next
+                </button>
+            `;
+
+            pagination.innerHTML = html;
+        }
+
+        // Actions
+        function editItem(id) {
+            alert(`Edit item ${id} - This would open an edit dialog in a real application`);
+        }
+
+        function deleteItem(id) {
+            if (confirm(`Are you sure you want to delete item ${id}?`)) {
+                allData = allData.filter(item => item.id !== id);
+                filterData();
+            }
+        }
+    </script>
+</body>
+</html>

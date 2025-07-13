@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import Demo - HTML Template</title>
+    <!-- External CSS -->
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="mb-8">
+            <a href="/html" class="text-blue-600 hover:text-blue-800 mb-4 inline-block">← Back to HTML Demos</a>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Import Demo</h1>
+            <p class="text-gray-600">Asset imports and external resources in HTML templates</p>
+        </header>
+
+        <!-- External Stylesheets -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">External Stylesheets</h2>
+            <p class="text-gray-600 mb-4">
+                HTML templates can import external CSS files from the public directory:
+            </p>
+            <pre class="bg-gray-100 rounded-lg p-4 overflow-x-auto text-sm">
+<code>&lt;link rel="stylesheet" href="/css/style.css"&gt;</code></pre>
+            <div class="mt-4 p-4 border-2 border-blue-500 rounded-lg">
+                <p class="blog-title">This uses styles from /css/style.css</p>
+                <p class="text-gray-600">The blue border and title styling come from the external stylesheet.</p>
+            </div>
+        </section>
+
+        <!-- External JavaScript -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">External JavaScript</h2>
+            <p class="text-gray-600 mb-4">
+                Load JavaScript libraries from the public directory or CDNs:
+            </p>
+            <div class="space-y-4">
+                <div>
+                    <button
+                        onclick="showExternalAlert()"
+                        class="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded transition-colors"
+                    >
+                        Call External Function
+                    </button>
+                    <span class="ml-3 text-sm text-gray-600">Uses function from /js/main.js</span>
+                </div>
+                <div>
+                    <button
+                        onclick="formatDate()"
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded transition-colors"
+                    >
+                        Format Date
+                    </button>
+                    <span class="ml-3 text-sm text-gray-600" id="dateOutput">Click to see formatted date</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Images and Assets -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Images and Assets</h2>
+            <p class="text-gray-600 mb-4">
+                Load images and other assets from the public directory:
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="text-center">
+                    <img src="/images/logo.svg" alt="Logo" class="mx-auto mb-2" style="width: 100px; height: 100px;">
+                    <p class="text-sm text-gray-600">SVG from /images/logo.svg</p>
+                </div>
+                <div class="text-center">
+                    <div class="w-24 h-24 mx-auto mb-2 rounded-lg bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center text-white font-bold text-2xl">
+                        IMG
+                    </div>
+                    <p class="text-sm text-gray-600">Placeholder for image assets</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- JSON Data Loading -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">JSON Data Loading</h2>
+            <p class="text-gray-600 mb-4">
+                Load and display JSON data dynamically:
+            </p>
+            <div class="mb-4">
+                <button
+                    onclick="loadJSONData()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded transition-colors"
+                >
+                    Load JSON Data
+                </button>
+            </div>
+            <div id="jsonOutput" class="bg-gray-100 rounded-lg p-4">
+                <p class="text-gray-500">Click button to load JSON data</p>
+            </div>
+        </section>
+
+        <!-- Font Loading -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Web Fonts</h2>
+            <p class="text-gray-600 mb-4">
+                Load custom fonts using @font-face or web font services:
+            </p>
+            <div class="space-y-3">
+                <p style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                    System font stack (default)
+                </p>
+                <p style="font-family: Georgia, serif;" class="text-lg">
+                    Serif font (Georgia)
+                </p>
+                <p style="font-family: 'Courier New', monospace;" class="text-lg">
+                    Monospace font (Courier New)
+                </p>
+            </div>
+        </section>
+
+        <!-- Dynamic Module Loading -->
+        <section class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Dynamic Module Loading</h2>
+            <p class="text-gray-600 mb-4">
+                Dynamically import JavaScript modules on demand:
+            </p>
+            <div class="space-y-4">
+                <button
+                    onclick="loadDynamicModule()"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded transition-colors"
+                >
+                    Load Dynamic Module
+                </button>
+                <div id="moduleOutput" class="text-gray-600"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- External JavaScript files -->
+    <script src="/js/main.js"></script>
+    
+    <script>
+        // Format date using external library simulation
+        function formatDate() {
+            const now = new Date();
+            const formatted = now.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            document.getElementById('dateOutput').textContent = formatted;
+        }
+
+        // Load JSON data
+        async function loadJSONData() {
+            const output = document.getElementById('jsonOutput');
+            output.innerHTML = '<p class="text-gray-500">Loading...</p>';
+
+            try {
+                // Simulate loading JSON data
+                const data = {
+                    name: "HTML Import Demo",
+                    version: "1.0.0",
+                    features: [
+                        "External CSS",
+                        "External JavaScript",
+                        "Image Assets",
+                        "JSON Data",
+                        "Web Fonts",
+                        "Dynamic Modules"
+                    ],
+                    timestamp: new Date().toISOString()
+                };
+
+                output.innerHTML = `
+                    <h3 class="font-semibold mb-2">${data.name} v${data.version}</h3>
+                    <p class="text-sm text-gray-600 mb-2">Features:</p>
+                    <ul class="list-disc list-inside text-sm space-y-1">
+                        ${data.features.map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                    <p class="text-xs text-gray-500 mt-2">Loaded at: ${new Date(data.timestamp).toLocaleTimeString()}</p>
+                `;
+            } catch (error) {
+                output.innerHTML = '<p class="text-red-600">Error loading JSON data</p>';
+            }
+        }
+
+        // Dynamic module loading simulation
+        async function loadDynamicModule() {
+            const output = document.getElementById('moduleOutput');
+            output.textContent = 'Loading module...';
+
+            // Simulate dynamic import
+            setTimeout(() => {
+                output.innerHTML = `
+                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                        <p class="font-medium">Module loaded successfully!</p>
+                        <p class="text-sm">Dynamic imports allow loading code on demand.</p>
+                    </div>
+                `;
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

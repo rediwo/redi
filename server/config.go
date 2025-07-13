@@ -7,11 +7,12 @@ import (
 
 // Config represents server configuration
 type Config struct {
-	Root    string
-	Port    int
-	Version string
-	LogFile string
-	Daemon  bool
+	Root      string
+	Port      int
+	Version   string
+	LogFile   string
+	Daemon    bool
+	RoutesDir string // Directory for routes (default: "routes")
 	
 	// Gzip compression settings
 	EnableGzip bool // Enable gzip compression (default: true)
@@ -23,6 +24,7 @@ func NewConfig() *Config {
 	return &Config{
 		Port:       8080,
 		Version:    "dev",
+		RoutesDir:  "routes",
 		EnableGzip: true,
 		GzipLevel:  -1, // Use gzip.DefaultCompression
 	}
@@ -51,9 +53,10 @@ func (c *Config) Validate() error {
 
 // EmbedConfig represents embedded server configuration
 type EmbedConfig struct {
-	EmbedFS fs.FS
-	Port    int
-	Version string
+	EmbedFS   fs.FS
+	Port      int
+	Version   string
+	RoutesDir string // Directory for routes (default: "routes")
 	
 	// Gzip compression settings
 	EnableGzip bool // Enable gzip compression (default: true)
@@ -66,6 +69,7 @@ func NewEmbedConfig(embedFS fs.FS) *EmbedConfig {
 		EmbedFS:    embedFS,
 		Port:       8080,
 		Version:    "dev",
+		RoutesDir:  "routes",
 		EnableGzip: true,
 		GzipLevel:  -1, // Use gzip.DefaultCompression
 	}

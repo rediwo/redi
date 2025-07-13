@@ -1,6 +1,6 @@
 <script>
     // Import a Svelte component
-    import Button from './Button.svelte';
+    import Button from './_lib/Button.svelte';
     
     // Import CSS (will be transformed to URL)
     import styles from '/css/style.css';
@@ -11,7 +11,11 @@
     // Import JSON data (will be transformed to actual data object)
     import packageInfo from '/data.json';
     
+    // Import JavaScript utilities (will be transformed to usable module)
+    import utils from '/js/utils.js';
+    
     let showInfo = false;
+    let dateExample = new Date();
     
     function toggleInfo() {
         showInfo = !showInfo;
@@ -23,6 +27,9 @@
     console.log('Package JSON data:', packageInfo);
     console.log('Package name:', packageInfo.name);
     console.log('Package version:', packageInfo.version);
+    console.log('Utils module:', utils);
+    console.log('Formatted date:', utils.formatDate(dateExample));
+    console.log('API URL:', utils.API_URL);
 </script>
 
 <main>
@@ -63,9 +70,21 @@
         </div>
         
         <div class="asset-demo">
-            <h3>4. Component Import</h3>
+            <h3>4. JavaScript Module Import</h3>
+            <p>JavaScript modules are transformed to make exports immediately available:</p>
+            <pre><code>import utils from '/js/utils.js';
+// Can use: utils.formatDate(), utils.API_URL, etc.</code></pre>
+            <div>
+                <p>Formatted date: <code>{utils.formatDate(dateExample)}</code></p>
+                <p>API URL: <code>{utils.API_URL}</code></p>
+                <p>Capitalized text: <code>{utils.capitalize('hello world')}</code></p>
+            </div>
+        </div>
+        
+        <div class="asset-demo">
+            <h3>5. Component Import</h3>
             <p>Svelte components work as before:</p>
-            <pre><code>import Button from './Button.svelte';</code></pre>
+            <pre><code>import Button from './_lib/Button.svelte';</code></pre>
             <Button on:click={toggleInfo}>
                 {showInfo ? 'Hide' : 'Show'} Implementation Details
             </Button>
@@ -78,7 +97,8 @@
         <ul>
             <li><strong>Flexible Imports:</strong> Support for CSS, JS, JSON, images, fonts, and more</li>
             <li><strong>URL Transformation:</strong> Non-Svelte imports become URL constants (except JSON)</li>
-            <li><strong>JSON Inlining:</strong> JSON imports are inlined as JavaScript objects (up to 100KB)</li>
+            <li><strong>JSON Inlining:</strong> JSON imports are always inlined as JavaScript objects</li>
+            <li><strong>JavaScript Modules:</strong> JS imports are transformed to immediately usable modules</li>
             <li><strong>Path Resolution:</strong> Supports relative and absolute paths</li>
             <li><strong>Asset Discovery:</strong> Looks in current dir, public/, and project root</li>
             <li><strong>Security:</strong> Prevents directory traversal attacks</li>
@@ -100,7 +120,7 @@
             <tr>
                 <td>.js, .mjs</td>
                 <td>JavaScript</td>
-                <td>URL string</td>
+                <td>Module object (always inlined)</td>
             </tr>
             <tr>
                 <td>.css</td>

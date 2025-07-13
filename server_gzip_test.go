@@ -37,19 +37,19 @@ func TestServerGzipCompression(t *testing.T) {
 	
 	// Create server with gzip enabled
 	server := &Server{
-		port:       8080,
-		router:     mux.NewRouter(),
-		fs:         fs,
-		version:    "test",
-		enableGzip: true,
-		gzipLevel:  gzip.DefaultCompression,
+		port:           8080,
+		router:         mux.NewRouter(),
+		fs:             fs,
+		version:        "test",
+		enableGzip:     true,
+		gzipLevel:      gzip.DefaultCompression,
+		handlerManager: NewHandlerManager(fs),
 	}
 	
-	// Setup routes
+	// Setup routes (includes static server)
 	if err := server.setupRoutes(); err != nil {
 		t.Fatalf("Failed to setup routes: %v", err)
 	}
-	server.setupStaticFileServer()
 	
 	// Get the handler with compression
 	var handler http.Handler = server.router

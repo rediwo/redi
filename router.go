@@ -16,6 +16,7 @@ type Route struct {
 	FileType  string
 	IsDynamic bool
 	ParamName string
+	IsIndex   bool // Whether this route is from an index file (e.g., index.html, index.js)
 }
 
 type RouteScanner struct {
@@ -101,6 +102,13 @@ func (rs *RouteScanner) createRoute(filePath, ext string) Route {
 	// Ensure the URL path starts with "/"
 	urlPath := "/" + pathWithoutExt
 	
+	// Check if this is an index file
+	isIndex := false
+	fileNameWithoutExt := strings.TrimSuffix(filepath.Base(relPath), ext)
+	if fileNameWithoutExt == "index" {
+		isIndex = true
+	}
+	
 	// Handle index files - convert "/index" to "/"
 	if strings.HasSuffix(urlPath, "/index") {
 		urlPath = strings.TrimSuffix(urlPath, "/index")
@@ -129,6 +137,7 @@ func (rs *RouteScanner) createRoute(filePath, ext string) Route {
 		FileType:  strings.TrimPrefix(ext, "."),
 		IsDynamic: isDynamic,
 		ParamName: paramName,
+		IsIndex:   isIndex,
 	}
 }
 

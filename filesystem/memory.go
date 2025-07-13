@@ -162,12 +162,40 @@ type memoryFS struct {
 }
 
 func (m *memoryFS) Open(name string) (fs.File, error) {
-	data, err := m.mfs.ReadFile(name)
+	// Clean the path - remove leading slash if present
+	cleanName := name
+	if len(cleanName) > 0 && cleanName[0] == '/' {
+		cleanName = cleanName[1:]
+	}
+	
+	// Handle root directory
+	if cleanName == "" || cleanName == "." {
+		// Return a directory listing
+		return &memoryDir{mfs: m.mfs, path: "."}, nil
+	}
+	
+	// Check if it's a directory
+	isDir := false
+	m.mfs.mu.RLock()
+	for path := range m.mfs.files {
+		if hasPathPrefix(path, cleanName) && path != cleanName {
+			isDir = true
+			break
+		}
+	}
+	m.mfs.mu.RUnlock()
+	
+	if isDir {
+		return &memoryDir{mfs: m.mfs, path: cleanName}, nil
+	}
+	
+	// Try to open as file
+	data, err := m.mfs.ReadFile(cleanName)
 	if err != nil {
 		return nil, err
 	}
 	
-	info, err := m.mfs.Stat(name)
+	info, err := m.mfs.Stat(cleanName)
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +204,29 @@ func (m *memoryFS) Open(name string) (fs.File, error) {
 		data: data,
 		info: info,
 	}, nil
+}
+
+// memoryDir implements fs.File for directories
+type memoryDir struct {
+	mfs  *MemoryFileSystem
+	path string
+}
+
+func (m *memoryDir) Stat() (fs.FileInfo, error) {
+	return &MemoryFileInfo{
+		name: m.path,
+		size: 0,
+		mode: fs.ModeDir | 0755,
+		time: time.Now(),
+	}, nil
+}
+
+func (m *memoryDir) Read([]byte) (int, error) {
+	return 0, errors.New("cannot read directory")
+}
+
+func (m *memoryDir) Close() error {
+	return nil
 }
 
 // memoryFile implements fs.File

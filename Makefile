@@ -41,6 +41,8 @@ help:
 	@echo "\033[32mtest-unit\033[0m      Run unit tests only"
 	@echo "\033[32mtest-integration\033[0m Run integration tests only"
 	@echo "\033[32mtest-api\033[0m       Run API tests only"
+	@echo "\033[32mtest-e2e\033[0m       Run E2E tests with Puppeteer"
+	@echo "\033[32mtest-e2e-debug\033[0m Run E2E tests with visible browser"
 	@echo "\033[32mbench\033[0m          Run benchmark tests"
 	@echo "\033[32mcoverage\033[0m       Run tests with coverage report"
 	@echo "\033[32mfmt\033[0m            Format Go code"
@@ -148,6 +150,29 @@ coverage:
 	@go test -coverprofile=coverage.out ./...
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)✅ Coverage report generated: coverage.html$(RESET)"
+
+## test-e2e: Run E2E tests with Puppeteer
+.PHONY: test-e2e
+test-e2e: build
+	@echo "$(YELLOW)Running E2E tests with Puppeteer...$(RESET)"
+	@if command -v puppeteer >/dev/null 2>&1 || npm list puppeteer >/dev/null 2>&1; then \
+		node e2e/run-tests.js; \
+	else \
+		echo "$(RED)❌ Puppeteer not found. Install with: npm install -g puppeteer$(RESET)"; \
+		exit 1; \
+	fi
+
+## test-e2e-watch: Run E2E tests in watch mode
+.PHONY: test-e2e-watch
+test-e2e-watch: build
+	@echo "$(YELLOW)Running E2E tests in watch mode...$(RESET)"
+	@node e2e/run-tests.js --watch
+
+## test-e2e-debug: Run E2E tests with visible browser
+.PHONY: test-e2e-debug
+test-e2e-debug: build
+	@echo "$(YELLOW)Running E2E tests with visible browser...$(RESET)"
+	@PUPPETEER_HEADLESS=false node e2e/run-tests.js
 
 ## fmt: Format Go code
 .PHONY: fmt

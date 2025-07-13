@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestSvelteHandler_ServeAsyncComponent(t *testing.T) {
 </style>
 `
 
-	err := fs.WriteFile("routes/TestComponent.svelte", []byte(testComponent))
+	err := fs.WriteFile("routes/_components/TestComponent.svelte", []byte(testComponent))
 	if err != nil {
 		t.Fatalf("Failed to create test component: %v", err)
 	}
@@ -49,10 +50,16 @@ func TestSvelteHandler_ServeAsyncComponent(t *testing.T) {
 	handler.RegisterRoutes(router)
 
 	// Test successful component loading
-	req := httptest.NewRequest("GET", "/svelte/components/TestComponent", nil)
+	req := httptest.NewRequest("GET", "/_components/TestComponent", nil)
 	w := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	// Test if handler can handle this request
+	if !handler.CanHandle("/_components/TestComponent") {
+		t.Fatal("Handler should be able to handle /_components/TestComponent")
+	}
+
+	// Serve the component
+	handler.ServeComponent(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
@@ -103,10 +110,16 @@ func TestSvelteHandler_ServeAsyncComponent_NotFound(t *testing.T) {
 	handler.RegisterRoutes(router)
 
 	// Test non-existent component
-	req := httptest.NewRequest("GET", "/svelte/components/NonExistentComponent", nil)
+	req := httptest.NewRequest("GET", "/_components/NonExistentComponent", nil)
 	w := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	// Test if handler can handle this request
+	if handler.CanHandle("/_components/NonExistentComponent") {
+		t.Fatal("Handler should not be able to handle non-existent component")
+	}
+
+	// Try to serve anyway
+	handler.ServeComponent(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", w.Code)
@@ -156,12 +169,12 @@ func TestSvelteHandler_ServeAsyncComponent_WithDependencies(t *testing.T) {
 </style>
 `
 
-	err := fs.WriteFile("routes/BaseComponent.svelte", []byte(baseComponent))
+	err := fs.WriteFile("routes/_components/BaseComponent.svelte", []byte(baseComponent))
 	if err != nil {
 		t.Fatalf("Failed to create base component: %v", err)
 	}
 
-	err = fs.WriteFile("routes/MainComponent.svelte", []byte(mainComponent))
+	err = fs.WriteFile("routes/_components/MainComponent.svelte", []byte(mainComponent))
 	if err != nil {
 		t.Fatalf("Failed to create main component: %v", err)
 	}
@@ -180,10 +193,15 @@ func TestSvelteHandler_ServeAsyncComponent_WithDependencies(t *testing.T) {
 	handler.RegisterRoutes(router)
 
 	// Test component with dependencies
-	req := httptest.NewRequest("GET", "/svelte/components/MainComponent?include_deps=true", nil)
+	req := httptest.NewRequest("GET", "/_components/MainComponent?include_deps=true", nil)
 	w := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	// Test if handler can handle this request
+	if !handler.CanHandle("/_components/MainComponent") {
+		t.Fatal("Handler should be able to handle /_components/MainComponent")
+	}
+
+	handler.ServeComponent(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
@@ -200,7 +218,7 @@ func TestSvelteHandler_ServeAsyncComponent_WithDependencies(t *testing.T) {
 	}
 
 	if len(response.Dependencies) == 0 {
-		t.Error("Expected dependencies to be included")
+		t.Errorf("Expected dependencies to be included, response: %+v", response)
 	}
 
 	// Check dependency details
@@ -271,7 +289,7 @@ func TestSvelteHandler_AsyncComponentCaching(t *testing.T) {
 <div>{message}</div>
 `
 
-	err := fs.WriteFile("routes/CachedComponent.svelte", []byte(testComponent))
+	err := fs.WriteFile("routes/_components/CachedComponent.svelte", []byte(testComponent))
 	if err != nil {
 		t.Fatalf("Failed to create test component: %v", err)
 	}
@@ -291,9 +309,14 @@ func TestSvelteHandler_AsyncComponentCaching(t *testing.T) {
 	handler.RegisterRoutes(router)
 
 	// First request
-	req1 := httptest.NewRequest("GET", "/svelte/components/CachedComponent", nil)
+	req1 := httptest.NewRequest("GET", "/_components/CachedComponent", nil)
 	w1 := httptest.NewRecorder()
-	router.ServeHTTP(w1, req1)
+	
+	if !handler.CanHandle("/_components/CachedComponent") {
+		t.Fatal("Handler should be able to handle /_components/CachedComponent")
+	}
+	
+	handler.ServeComponent(w1, req1)
 
 	if w1.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w1.Code)
@@ -305,10 +328,10 @@ func TestSvelteHandler_AsyncComponentCaching(t *testing.T) {
 	}
 
 	// Second request with same ETag should return 304
-	req2 := httptest.NewRequest("GET", "/svelte/components/CachedComponent", nil)
+	req2 := httptest.NewRequest("GET", "/_components/CachedComponent", nil)
 	req2.Header.Set("If-None-Match", etag1)
 	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
+	handler.ServeComponent(w2, req2)
 
 	if w2.Code != http.StatusNotModified {
 		t.Errorf("Expected status 304, got %d", w2.Code)
@@ -326,8 +349,8 @@ func TestSvelteHandler_AsyncRouteRegistration(t *testing.T) {
 	router1 := mux.NewRouter()
 	handler1.RegisterRoutes(router1)
 
-	// Should not register async routes
-	req1 := httptest.NewRequest("GET", "/svelte/components/test", nil)
+	// Should not register async library route
+	req1 := httptest.NewRequest("GET", config1.AsyncLibraryPath, nil)
 	w1 := httptest.NewRecorder()
 	router1.ServeHTTP(w1, req1)
 
@@ -343,19 +366,19 @@ func TestSvelteHandler_AsyncRouteRegistration(t *testing.T) {
 	router2 := mux.NewRouter()
 	handler2.RegisterRoutes(router2)
 
-	// Should register async routes (404 for non-existent component is expected)
-	req2 := httptest.NewRequest("GET", "/svelte/components/test", nil)
+	// Should register async library route
+	req2 := httptest.NewRequest("GET", config2.AsyncLibraryPath, nil)
 	w2 := httptest.NewRecorder()
 	router2.ServeHTTP(w2, req2)
 
-	// Should get 404 for non-existent component (not route not found)
-	if w2.Code != http.StatusNotFound {
-		t.Errorf("Expected 404 for non-existent component, got %d", w2.Code)
+	// Should get 200 for async library
+	if w2.Code != http.StatusOK {
+		t.Errorf("Expected 200 for async library, got %d", w2.Code)
 	}
 
-	// But should be JSON response, not HTML
-	if w2.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Expected JSON response for async component, got %s", w2.Header().Get("Content-Type"))
+	// Should be JavaScript response
+	if !strings.Contains(w2.Header().Get("Content-Type"), "javascript") {
+		t.Errorf("Expected JavaScript response for async library, got %s", w2.Header().Get("Content-Type"))
 	}
 }
 

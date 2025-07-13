@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Template Demos - Redi Server</title>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-800 mb-4">HTML Template Demos</h1>
+            <p class="text-xl text-gray-600">
+                Explore powerful HTML templates with Vimesh Style integration
+            </p>
+        </header>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">What is HTML Templates?</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <p class="text-gray-600 mb-4">
+                    HTML Templates in Redi Server provide a powerful way to create dynamic web pages with:
+                </p>
+                <ul class="list-disc list-inside space-y-2 text-gray-600">
+                    <li>Go template syntax for dynamic content</li>
+                    <li>Server-side JavaScript execution with <code class="bg-gray-100 px-2 py-1 rounded">&lt;script @server&gt;</code></li>
+                    <li>Layout system for consistent page structure</li>
+                    <li>Built-in Vimesh Style for utility-first CSS</li>
+                    <li>No build step required - just write HTML</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">Demo Gallery</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Counter Demo -->
+                <a href="/html/counter" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Counter Demo</h3>
+                    <p class="text-gray-600">Interactive counter with server-side state management</p>
+                </a>
+
+                <!-- Button Demo -->
+                <a href="/html/button-demo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Button Components</h3>
+                    <p class="text-gray-600">Various button styles using Vimesh Style utilities</p>
+                </a>
+
+                <!-- Todo App -->
+                <a href="/html/todo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Todo Application</h3>
+                    <p class="text-gray-600">Full-featured todo app with CRUD operations</p>
+                </a>
+
+                <!-- Data Table -->
+                <a href="/html/data-table-demo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Data Table</h3>
+                    <p class="text-gray-600">Interactive data table with sorting and filtering</p>
+                </a>
+
+                <!-- Card Gallery -->
+                <a href="/html/card-gallery" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Card Gallery</h3>
+                    <p class="text-gray-600">Beautiful card layouts with responsive design</p>
+                </a>
+
+                <!-- Component Library -->
+                <a href="/html/component-library-demo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Component Library</h3>
+                    <p class="text-gray-600">Comprehensive UI component showcase</p>
+                </a>
+
+                <!-- Vimesh Style Demo -->
+                <a href="/html/vimesh-demo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Vimesh Style Demo</h3>
+                    <p class="text-gray-600">Showcase of Vimesh Style CSS utilities</p>
+                </a>
+
+                <!-- Import Demo -->
+                <a href="/html/import-demo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Import Demo</h3>
+                    <p class="text-gray-600">Asset imports and external resources</p>
+                </a>
+
+                <!-- Async Demo -->
+                <a href="/html/async-demo" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
+                    <h3 class="text-xl font-semibold text-blue-600 mb-2">Async Loading</h3>
+                    <p class="text-gray-600">Dynamic content loading with AJAX</p>
+                </a>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">Key Features</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">🎨 Vimesh Style Integration</h3>
+                    <p class="text-gray-600">
+                        Built-in Tailwind-compatible utility classes with runtime CSS generation.
+                        No build step required - just use the classes in your HTML.
+                    </p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">🚀 Server-Side JavaScript</h3>
+                    <p class="text-gray-600">
+                        Execute JavaScript on the server with <code class="bg-gray-100 px-2 py-1 rounded">&lt;script @server&gt;</code>
+                        tags to prepare data before rendering.
+                    </p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">📐 Layout System</h3>
+                    <p class="text-gray-600">
+                        Create reusable layouts with <code class="bg-gray-100 px-2 py-1 rounded">{{"{{"}}layout 'name'{{"}}"}}</code>
+                        directive for consistent page structure.
+                    </p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">⚡ No Build Step</h3>
+                    <p class="text-gray-600">
+                        Write HTML, save, and refresh. No compilation or bundling needed.
+                        Perfect for rapid prototyping and development.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <footer class="text-center text-gray-600 py-8 border-t">
+            <p>Built with Redi Server - The Modern Go Web Framework</p>
+        </footer>
+    </div>
+</body>
+</html>

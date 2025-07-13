@@ -8,84 +8,95 @@ import (
 	"github.com/rediwo/redi/filesystem"
 )
 
-func TestSvelteHandler_AssetImports(t *testing.T) {
+func TestImportTransformer_AssetTypeDetection(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
-	handler := NewSvelteHandler(fs)
+	transformer := NewImportTransformer(fs)
 
 	tests := []struct {
-		name     string
-		source   string
-		expected []string
+		path     string
+		expected string
 	}{
-		{
-			name: "import CSS file",
-			source: `
-<script>
-import styles from './styles.css';
-import Button from './Button.svelte';
-</script>
-`,
-			expected: []string{"./styles.css", "./Button.svelte"},
-		},
-		{
-			name: "import JavaScript library",
-			source: `
-<script>
-import utils from './utils.js';
-import { helpers } from '../lib/helpers.js';
-import Component from './Component.svelte';
-</script>
-`,
-			expected: []string{"./utils.js", "../lib/helpers.js", "./Component.svelte"},
-		},
-		{
-			name: "import image assets",
-			source: `
-<script>
-import logo from './assets/logo.png';
-import icon from '/images/icon.svg';
-</script>
-`,
-			expected: []string{"./assets/logo.png", "/images/icon.svg"},
-		},
-		{
-			name: "import JSON data",
-			source: `
-<script>
-import config from './config.json';
-import data from '../data/users.json';
-</script>
-`,
-			expected: []string{"./config.json", "../data/users.json"},
-		},
+		{"script.js", "javascript"},
+		{"module.mjs", "javascript"},
+		{"types.ts", "typescript"},
+		{"styles.css", "stylesheet"},
+		{"data.json", "json"},
+		{"logo.png", "image"},
+		{"photo.jpg", "image"},
+		{"icon.svg", "image"},
+		{"font.woff", "font"},
+		{"font.woff2", "font"},
+		{"unknown.xyz", "unknown"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			imports := handler.parseImports(tt.source)
-			if len(imports) != len(tt.expected) {
-				t.Errorf("Expected %d imports, got %d", len(tt.expected), len(imports))
-				return
-			}
-			for i, imp := range imports {
-				if imp != tt.expected[i] {
-					t.Errorf("Expected import %s, got %s", tt.expected[i], imp)
-				}
+		t.Run(tt.path, func(t *testing.T) {
+			assetType := transformer.GetAssetType(tt.path)
+			if assetType != tt.expected {
+				t.Errorf("Expected asset type %s for %s, got %s", tt.expected, tt.path, assetType)
 			}
 		})
 	}
 }
 
-// Asset type detection is now tested in import_transformer_test.go
-
-// Asset path resolution is now tested in import_transformer_test.go
-
-func TestSvelteHandler_TransformAssetImports(t *testing.T) {
+func TestImportTransformer_ResolveAssetPath(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
-	handler := NewSvelteHandler(fs)
+	transformer := NewImportTransformer(fs)
 
 	// Create test files
-	_ = fs.WriteFile("routes/component.svelte", []byte(""))
+	_ = fs.WriteFile("routes/component.js", []byte(""))
+	_ = fs.WriteFile("routes/styles.css", []byte(""))
+	_ = fs.WriteFile("public/logo.png", []byte(""))
+	_ = fs.WriteFile("public/images/icon.svg", []byte(""))
+
+	tests := []struct {
+		name        string
+		importPath  string
+		currentPath string
+		wantPath    string
+		wantType    string
+	}{
+		{
+			name:        "relative CSS in same directory",
+			importPath:  "./styles.css",
+			currentPath: "routes/component.js",
+			wantPath:    "routes/styles.css",
+			wantType:    "stylesheet",
+		},
+		{
+			name:        "absolute image in public",
+			importPath:  "/logo.png",
+			currentPath: "routes/component.js",
+			wantPath:    "public/logo.png",
+			wantType:    "image",
+		},
+		{
+			name:        "nested image in public",
+			importPath:  "/images/icon.svg",
+			currentPath: "routes/component.js",
+			wantPath:    "public/images/icon.svg",
+			wantType:    "image",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotPath, gotType := transformer.ResolveAssetPath(tt.importPath, tt.currentPath)
+			if gotPath != tt.wantPath {
+				t.Errorf("Expected path %s, got %s", tt.wantPath, gotPath)
+			}
+			if gotType != tt.wantType {
+				t.Errorf("Expected type %s, got %s", tt.wantType, gotType)
+			}
+		})
+	}
+}
+
+func TestImportTransformer_TransformImports(t *testing.T) {
+	fs := filesystem.NewMemoryFileSystem()
+	transformer := NewImportTransformer(fs)
+
+	// Create test files
 	_ = fs.WriteFile("routes/styles.css", []byte(""))
 	_ = fs.WriteFile("public/logo.png", []byte(""))
 
@@ -100,8 +111,7 @@ function init() {
 }
 `
 
-	imports := make(map[string]string)
-	transformed := handler.transformToIIFE(jsCode, "Component", imports, "routes/component.svelte")
+	transformed, componentImports := transformer.TransformImports(jsCode, "routes/component.js", []string{".svelte"})
 
 	// Check that CSS import was transformed to URL
 	if !strings.Contains(transformed, `const styles = '/styles.css'`) {
@@ -113,9 +123,9 @@ function init() {
 		t.Error("Expected image import to be transformed to URL constant")
 	}
 
-	// Check that Svelte import was preserved in imports map
-	if imports["Button"] != "./Button.svelte" {
-		t.Error("Expected Svelte import to be preserved in imports map")
+	// Check that Svelte import was preserved in component imports
+	if componentImports["Button"] != "./Button.svelte" {
+		t.Error("Expected Svelte import to be preserved in component imports")
 	}
 
 	// Check that import statements were removed
@@ -124,11 +134,33 @@ function init() {
 	}
 }
 
-// Public URL generation is now tested in import_transformer_test.go
-
-func TestSvelteHandler_JavaScriptImportTransformation(t *testing.T) {
+func TestImportTransformer_PublicURLGeneration(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
-	handler := NewSvelteHandler(fs)
+	transformer := NewImportTransformer(fs)
+
+	tests := []struct {
+		assetPath string
+		expected  string
+	}{
+		{"public/images/logo.png", "/images/logo.png"},
+		{"routes/styles.css", "/styles.css"},
+		{"assets/font.woff", "/assets/font.woff"},
+		{"public/favicon.ico", "/favicon.ico"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.assetPath, func(t *testing.T) {
+			url := transformer.GetPublicURL(tt.assetPath)
+			if url != tt.expected {
+				t.Errorf("Expected URL %s for path %s, got %s", tt.expected, tt.assetPath, url)
+			}
+		})
+	}
+}
+
+func TestImportTransformer_JavaScriptTransformation(t *testing.T) {
+	fs := filesystem.NewMemoryFileSystem()
+	transformer := NewImportTransformer(fs)
 
 	// Create test JS files with ES6 exports
 	utilsJS := `export function hello() { return "Hello"; }
@@ -140,13 +172,6 @@ export default { hello, version };`
 	commonJS := `function greet(name) { return "Hi " + name; }
 module.exports = { greet };`
 	_ = fs.WriteFile("routes/common.js", []byte(commonJS))
-	
-	// Create large JS file
-	largeJS := strings.Repeat("export function test() { return 'test'; }\n", 2000)
-	_ = fs.WriteFile("routes/large.js", []byte(largeJS))
-
-	// Initialize compiler
-	_ = handler.initializeCompiler()
 
 	tests := []struct {
 		name          string
@@ -173,15 +198,6 @@ module.exports = { greet };`
 			},
 		},
 		{
-			name:   "Large JS file is also transformed",
-			jsCode: `import large from './large.js';`,
-			checkFunction: func(transformed string) bool {
-				// Should also be transformed to IIFE (no size limit)
-				return strings.Contains(transformed, "const large = (function()") &&
-					strings.Contains(transformed, "__exports")
-			},
-		},
-		{
 			name:   "Non-existent JS file",
 			jsCode: `import missing from './missing.js';`,
 			checkFunction: func(transformed string) bool {
@@ -194,7 +210,7 @@ module.exports = { greet };`
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Transform the code
-			transformed := handler.transformToIIFE(tt.jsCode, "TestComponent", make(map[string]string), "routes/component.svelte")
+			transformed, _ := transformer.TransformImports(tt.jsCode, "routes/component.js", []string{})
 			
 			// Check if the transformation is correct
 			if !tt.checkFunction(transformed) {
@@ -202,16 +218,16 @@ module.exports = { greet };`
 			}
 			
 			// Ensure import was removed
-			if strings.Contains(transformed, "import ") && !strings.Contains(transformed, "await import") {
+			if strings.Contains(transformed, "import ") {
 				t.Error("Import statement should be removed")
 			}
 		})
 	}
 }
 
-func TestSvelteHandler_JSONImportInlining(t *testing.T) {
+func TestImportTransformer_JSONInlining(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
-	handler := NewSvelteHandler(fs)
+	transformer := NewImportTransformer(fs)
 
 	// Create test JSON files
 	smallJSON := `{"name": "test", "version": "1.0.0", "data": [1, 2, 3]}`
@@ -237,50 +253,50 @@ func TestSvelteHandler_JSONImportInlining(t *testing.T) {
 		name       string
 		jsCode     string
 		wantResult string
-		wantURL    bool
+		wantInline bool
 	}{
 		{
 			name:       "small JSON file should be inlined",
 			jsCode:     `import config from './config.json';`,
 			wantResult: fmt.Sprintf("const config = %s;", smallJSON),
-			wantURL:    false,
+			wantInline: true,
 		},
 		{
 			name:       "large JSON file should also be inlined",
 			jsCode:     `import large from './large.json';`,
 			wantResult: fmt.Sprintf("const large = %s;", largeJSON),
-			wantURL:    false,
+			wantInline: true,
 		},
 		{
 			name:       "invalid JSON should use URL",
 			jsCode:     `import invalid from './invalid.json';`,
 			wantResult: `const invalid = '/invalid.json';`,
-			wantURL:    true,
+			wantInline: false,
 		},
 		{
 			name:       "non-existent JSON should not be transformed",
 			jsCode:     `import missing from './missing.json';`,
 			wantResult: ``,
-			wantURL:    false,
+			wantInline: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Transform the code
-			transformed := handler.transformToIIFE(tt.jsCode, "TestComponent", make(map[string]string), "routes/component.svelte")
+			transformed, _ := transformer.TransformImports(tt.jsCode, "routes/component.js", []string{})
 			
 			// Check if the result contains what we expect
 			if tt.wantResult != "" {
-				if tt.wantURL {
-					// Should be a URL string
-					if !strings.Contains(transformed, tt.wantResult) {
-						t.Errorf("Expected transformed code to contain URL assignment:\n%s\nGot:\n%s", tt.wantResult, transformed)
-					}
-				} else {
+				if tt.wantInline {
 					// Should be inlined JSON data
 					if !strings.Contains(transformed, "const config = {") && !strings.Contains(transformed, "const large = {") {
 						t.Errorf("Expected transformed code to contain inlined JSON data, got:\n%s", transformed)
+					}
+				} else {
+					// Should be a URL string
+					if !strings.Contains(transformed, tt.wantResult) {
+						t.Errorf("Expected transformed code to contain URL assignment:\n%s\nGot:\n%s", tt.wantResult, transformed)
 					}
 				}
 			}

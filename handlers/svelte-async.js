@@ -27,6 +27,33 @@
         }
     }
     
+    // Resolve component path - handle relative paths
+    function resolveComponentPath(componentPath) {
+        // If it's a relative path starting with './', resolve it based on current page
+        if (componentPath.startsWith('./')) {
+            var currentPath = window.location.pathname;
+            // Remove filename part, keep directory
+            var basePath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+            return basePath + '/' + componentPath.substring(2);
+        }
+        
+        // If it's an absolute path starting with '/', use as-is
+        if (componentPath.startsWith('/')) {
+            return componentPath;
+        }
+        
+        // For backwards compatibility, assume it's a component name in current framework
+        var currentPath = window.location.pathname;
+        var pathParts = currentPath.split('/');
+        if (pathParts.length >= 2 && pathParts[1]) {
+            // e.g., /svelte/page -> /svelte/_lib/ComponentName
+            return '/' + pathParts[1] + '/_lib/' + componentPath;
+        }
+        
+        // Fallback
+        return componentPath;
+    }
+
     // Load and register a component
     function loadComponent(componentPath, options) {
         options = options || {};
@@ -41,8 +68,11 @@
             return loadingCache[componentPath];
         }
         
+        // Resolve the component path
+        var resolvedPath = resolveComponentPath(componentPath);
+        
         // Start loading
-        var promise = fetch('/svelte/components/' + componentPath, {
+        var promise = fetch(resolvedPath, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',

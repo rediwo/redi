@@ -23,6 +23,9 @@ func (f *Factory) CreateServer(config *Config) (*redi.Server, error) {
 	server := redi.NewServerWithVersion(config.Root, config.Port, config.Version)
 	server.SetGzipEnabled(config.EnableGzip)
 	server.SetGzipLevel(config.GzipLevel)
+	if config.RoutesDir != "" {
+		server.SetRoutesDir(config.RoutesDir)
+	}
 	
 	return server, nil
 }
@@ -36,6 +39,9 @@ func (f *Factory) CreateEmbeddedServer(config *EmbedConfig) (*redi.Server, error
 	server := redi.NewServerWithFSAndVersion(config.EmbedFS, config.Port, config.Version)
 	server.SetGzipEnabled(config.EnableGzip)
 	server.SetGzipLevel(config.GzipLevel)
+	if config.RoutesDir != "" {
+		server.SetRoutesDir(config.RoutesDir)
+	}
 	
 	return server, nil
 }

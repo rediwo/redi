@@ -28,12 +28,14 @@ func main() {
 	var version bool
 	var logFile string
 	var daemon bool
+	var disableGzip bool
 
 	flag.StringVar(&root, "root", "", "Root directory containing public and routes folders")
 	flag.IntVar(&port, "port", 8080, "Port to serve on")
 	flag.BoolVar(&version, "version", false, "Show version information")
 	flag.StringVar(&logFile, "log", "", "Log file path (enables background mode like nohup)")
 	flag.BoolVar(&daemon, "daemon", false, "Internal flag for daemon mode")
+	flag.BoolVar(&disableGzip, "disable-gzip", false, "Disable gzip compression")
 
 	// Custom usage message
 	flag.Usage = func() {
@@ -78,7 +80,7 @@ func main() {
 		Version:    currentVersion,
 		LogFile:    logFile,
 		Daemon:     daemon,
-		EnableGzip: true,
+		EnableGzip: !disableGzip,
 		GzipLevel:  -1, // Use gzip.DefaultCompression
 	}
 

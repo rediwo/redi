@@ -1,0 +1,17 @@
+{
+  "name": "redi-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for Redi framework",
+  "private": true,
+  "scripts": {
+    "test": "node run-tests.js",
+    "test:debug": "PUPPETEER_HEADLESS=false node run-tests.js",
+    "test:watch": "node run-tests.js --watch",
+    "test:react": "node run-tests.js --framework=react",
+    "test:vue": "node run-tests.js --framework=vue",
+    "test:svelte": "node run-tests.js --framework=svelte"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.12.1"
+  }
+}

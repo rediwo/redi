@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo Application - HTML Template</title>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <header class="mb-8">
+            <a href="/html" class="text-blue-600 hover:text-blue-800 mb-4 inline-block">← Back to HTML Demos</a>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Todo Application</h1>
+            <p class="text-gray-600">Full-featured todo app with CRUD operations</p>
+        </header>
+
+        <section class="bg-white rounded-lg shadow-md p-6">
+            <!-- Add new todo form -->
+            <form onsubmit="addTodo(event)" class="mb-6">
+                <div class="flex gap-2">
+                    <input
+                        type="text"
+                        id="todoInput"
+                        placeholder="What needs to be done?"
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                    >
+                    <button
+                        type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-lg transition-colors"
+                    >
+                        Add Todo
+                    </button>
+                </div>
+            </form>
+
+            <!-- Filter buttons -->
+            <div class="flex gap-2 mb-6">
+                <button
+                    onclick="setFilter('all')"
+                    class="filter-btn px-4 py-2 rounded-lg font-medium transition-colors"
+                    data-filter="all"
+                >
+                    All <span class="text-sm text-gray-500" id="allCount">(0)</span>
+                </button>
+                <button
+                    onclick="setFilter('active')"
+                    class="filter-btn px-4 py-2 rounded-lg font-medium transition-colors"
+                    data-filter="active"
+                >
+                    Active <span class="text-sm text-gray-500" id="activeCount">(0)</span>
+                </button>
+                <button
+                    onclick="setFilter('completed')"
+                    class="filter-btn px-4 py-2 rounded-lg font-medium transition-colors"
+                    data-filter="completed"
+                >
+                    Completed <span class="text-sm text-gray-500" id="completedCount">(0)</span>
+                </button>
+            </div>
+
+            <!-- Todo list -->
+            <div id="todoList" class="space-y-2 mb-6">
+                <!-- Todos will be dynamically added here -->
+            </div>
+
+            <!-- Clear completed button -->
+            <div class="flex justify-between items-center">
+                <button
+                    onclick="clearCompleted()"
+                    class="text-red-600 hover:text-red-800 font-medium transition-colors"
+                    id="clearBtn"
+                    style="display: none;"
+                >
+                    Clear completed
+                </button>
+                <button
+                    onclick="toggleAllComplete()"
+                    class="text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                    id="toggleAllBtn"
+                    style="display: none;"
+                >
+                    Toggle all
+                </button>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h3 class="text-lg font-semibold text-gray-700 mb-3">About This Demo</h3>
+            <p class="text-gray-600 mb-2">
+                This todo app demonstrates client-side state management with localStorage persistence.
+                All todos are saved locally and will persist across page reloads.
+            </p>
+            <p class="text-gray-600">
+                Features include: add, edit, delete, complete/uncomplete todos, filter by status,
+                clear completed items, and toggle all items.
+            </p>
+        </section>
+    </div>
+
+    <script>
+        // Todo state management
+        let todos = JSON.parse(localStorage.getItem('todos') || '[]');
+        let currentFilter = 'all';
+        let editingId = null;
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateFilterButtons();
+            renderTodos();
+        });
+
+        // Add new todo
+        function addTodo(event) {
+            event.preventDefault();
+            const input = document.getElementById('todoInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                const todo = {
+                    id: Date.now(),
+                    text: text,
+                    completed: false,
+                    createdAt: new Date().toISOString()
+                };
+                
+                todos.unshift(todo);
+                saveTodos();
+                input.value = '';
+                renderTodos();
+            }
+        }
+
+        // Toggle todo completion
+        function toggleTodo(id) {
+            const todo = todos.find(t => t.id === id);
+            if (todo) {
+                todo.completed = !todo.completed;
+                saveTodos();
+                renderTodos();
+            }
+        }
+
+        // Delete todo
+        function deleteTodo(id) {
+            todos = todos.filter(t => t.id !== id);
+            saveTodos();
+            renderTodos();
+        }
+
+        // Start editing todo
+        function startEdit(id) {
+            editingId = id;
+            renderTodos();
+        }
+
+        // Save edited todo
+        function saveEdit(id, newText) {
+            const todo = todos.find(t => t.id === id);
+            if (todo && newText.trim()) {
+                todo.text = newText.trim();
+                saveTodos();
+            }
+            editingId = null;
+            renderTodos();
+        }
+
+        // Cancel editing
+        function cancelEdit() {
+            editingId = null;
+            renderTodos();
+        }
+
+        // Set filter
+        function setFilter(filter) {
+            currentFilter = filter;
+            updateFilterButtons();
+            renderTodos();
+        }
+
+        // Clear completed todos
+        function clearCompleted() {
+            todos = todos.filter(t => !t.completed);
+            saveTodos();
+            renderTodos();
+        }
+
+        // Toggle all todos complete/incomplete
+        function toggleAllComplete() {
+            const allCompleted = todos.every(t => t.completed);
+            todos.forEach(t => t.completed = !allCompleted);
+            saveTodos();
+            renderTodos();
+        }
+
+        // Save todos to localStorage
+        function saveTodos() {
+            localStorage.setItem('todos', JSON.stringify(todos));
+        }
+
+        // Get filtered todos
+        function getFilteredTodos() {
+            switch (currentFilter) {
+                case 'active':
+                    return todos.filter(t => !t.completed);
+                case 'completed':
+                    return todos.filter(t => t.completed);
+                default:
+                    return todos;
+            }
+        }
+
+        // Update filter buttons
+        function updateFilterButtons() {
+            const allCount = todos.length;
+            const activeCount = todos.filter(t => !t.completed).length;
+            const completedCount = todos.filter(t => t.completed).length;
+
+            document.getElementById('allCount').textContent = `(${allCount})`;
+            document.getElementById('activeCount').textContent = `(${activeCount})`;
+            document.getElementById('completedCount').textContent = `(${completedCount})`;
+
+            // Update button styles
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.dataset.filter === currentFilter) {
+                    btn.className = 'filter-btn px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white';
+                } else {
+                    btn.className = 'filter-btn px-4 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300';
+                }
+            });
+
+            // Show/hide clear completed button
+            document.getElementById('clearBtn').style.display = completedCount > 0 ? 'block' : 'none';
+            document.getElementById('toggleAllBtn').style.display = allCount > 0 ? 'block' : 'none';
+        }
+
+        // Render todos
+        function renderTodos() {
+            const todoList = document.getElementById('todoList');
+            const filteredTodos = getFilteredTodos();
+
+            if (filteredTodos.length === 0) {
+                todoList.innerHTML = '<p class="text-gray-500 text-center py-8">No todos to display</p>';
+            } else {
+                todoList.innerHTML = filteredTodos.map(todo => {
+                    if (editingId === todo.id) {
+                        return `
+                            <div class="todo-item p-3 border rounded-lg bg-gray-50">
+                                <input
+                                    type="text"
+                                    value="${todo.text}"
+                                    onblur="saveEdit(${todo.id}, this.value)"
+                                    onkeydown="if(event.key === 'Enter') saveEdit(${todo.id}, this.value); if(event.key === 'Escape') cancelEdit();"
+                                    class="w-full px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    autofocus
+                                >
+                            </div>
+                        `;
+                    }
+
+                    return `
+                        <div class="todo-item flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 transition-colors ${todo.completed ? 'opacity-60' : ''}">
+                            <input
+                                type="checkbox"
+                                ${todo.completed ? 'checked' : ''}
+                                onchange="toggleTodo(${todo.id})"
+                                class="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            >
+                            <span
+                                class="flex-1 ${todo.completed ? 'line-through text-gray-500' : 'text-gray-800'}"
+                                ondblclick="startEdit(${todo.id})"
+                            >
+                                ${todo.text}
+                            </span>
+                            <button
+                                onclick="startEdit(${todo.id})"
+                                class="text-blue-600 hover:text-blue-800 px-2 py-1 text-sm transition-colors"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                onclick="deleteTodo(${todo.id})"
+                                class="text-red-600 hover:text-red-800 px-2 py-1 text-sm transition-colors"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            updateFilterButtons();
+        }
+    </script>
+</body>
+</html>

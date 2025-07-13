@@ -48,3 +48,6 @@ build/
 /cmd/redi/redi
 /cmd/rejs/rejs
 /cmd/redi-build/redi-build
+
+node_modules/
+screenshots/

@@ -139,7 +139,7 @@ func TestSvelteHandler_CompileError(t *testing.T) {
 
 func TestSvelteHandler_HTTPRequest(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
-	
+
 	// Create a test Svelte file
 	svelteContent := `
 <script>
@@ -197,9 +197,9 @@ func TestSvelteHandler_FileSize(t *testing.T) {
 	// Test embedded compiler size
 	compilerSize := len(svelteCompilerJS)
 	compilerSizeMB := float64(compilerSize) / (1024 * 1024)
-	
+
 	t.Logf("Embedded Svelte compiler size: %.2f MB", compilerSizeMB)
-	
+
 	// Verify it's within expected range (1-2 MB)
 	if compilerSizeMB < 1.0 || compilerSizeMB > 2.0 {
 		t.Errorf("Unexpected compiler size: %.2f MB, expected 1-2 MB", compilerSizeMB)
@@ -246,7 +246,7 @@ func BenchmarkSvelteCompilation(b *testing.B) {
 func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 	// Create test filesystem with a Svelte component using Tailwind classes
 	fs := filesystem.NewMemoryFileSystem()
-	
+
 	svelteComponent := `
 <script>
 	let count = 0;
@@ -273,105 +273,105 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 	}
 </style>
 `
-	
+
 	// Write the component to the filesystem
 	err := fs.WriteFile("routes/test.svelte", []byte(svelteComponent))
 	if err != nil {
 		t.Fatalf("Failed to write test component: %v", err)
 	}
-	
+
 	// Create config with Vimesh Style enabled
 	config := DefaultSvelteConfig()
 	config.VimeshStyle = &utils.VimeshStyleConfig{Enable: true}
-	
+
 	// Create router
 	router := mux.NewRouter()
-	
+
 	// Create handler with router
 	handler := NewSvelteHandlerWithRouter(fs, config, router)
-	
+
 	// Create route for the component
 	route := Route{
 		Path:     "/test",
 		FilePath: "routes/test.svelte",
 		FileType: "svelte",
 	}
-	
+
 	// Register the component handler
 	router.HandleFunc(route.Path, handler.Handle(route)).Methods("GET")
-	
+
 	// Test 1: Vimesh Style JavaScript route
 	t.Run("VimeshStyleJSRoute", func(t *testing.T) {
 		req := httptest.NewRequest("GET", config.VimeshStylePath, nil)
 		w := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		contentType := w.Header().Get("Content-Type")
 		if !strings.Contains(contentType, "application/javascript") {
 			t.Errorf("Expected JavaScript content type, got %s", contentType)
 		}
-		
+
 		body := w.Body.String()
 		if len(body) == 0 {
 			t.Error("Vimesh Style JS should not be empty")
 		}
-		
+
 		// Check for Vimesh Style markers
 		if !strings.Contains(body, "$vs") && !strings.Contains(body, "vimesh") {
 			t.Error("Response doesn't contain Vimesh Style code")
 		}
 	})
-	
+
 	// Test 2: Svelte Runtime route
 	t.Run("SvelteRuntimeRoute", func(t *testing.T) {
 		req := httptest.NewRequest("GET", config.RuntimePath, nil)
 		w := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		contentType := w.Header().Get("Content-Type")
 		if !strings.Contains(contentType, "application/javascript") {
 			t.Errorf("Expected JavaScript content type, got %s", contentType)
 		}
-		
+
 		body := w.Body.String()
 		if len(body) == 0 {
 			t.Error("Svelte runtime should not be empty")
 		}
 	})
-	
+
 	// Test 3: Component with Vimesh Style
 	t.Run("ComponentWithVimeshStyle", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		w := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		body := w.Body.String()
-		
+
 		// Check for Vimesh Style CSS
 		if !strings.Contains(body, `<style id="vimesh-styles">`) {
 			t.Error("Component should include Vimesh Style CSS")
 		}
-		
+
 		// Check for Vimesh Style script tag
 		if !strings.Contains(body, config.VimeshStylePath) {
 			t.Error("Component should include Vimesh Style script tag")
 		}
-		
+
 		// Check that some CSS was extracted
 		if !strings.Contains(body, "bg-blue-500") || !strings.Contains(body, "text-white") {
 			// The CSS might be transformed, so just check that the style tag has content
@@ -385,33 +385,33 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 			}
 		}
 	})
-	
+
 	// Test 4: Caching headers
 	t.Run("CachingHeaders", func(t *testing.T) {
 		req := httptest.NewRequest("GET", config.VimeshStylePath, nil)
 		w := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w, req)
-		
+
 		// Check ETag
 		etag := w.Header().Get("ETag")
 		if etag == "" {
 			t.Error("Expected ETag header")
 		}
-		
+
 		// Check Cache-Control
 		cacheControl := w.Header().Get("Cache-Control")
 		if !strings.Contains(cacheControl, "max-age=") {
 			t.Error("Expected Cache-Control header with max-age")
 		}
-		
+
 		// Test conditional request
 		req2 := httptest.NewRequest("GET", config.VimeshStylePath, nil)
 		req2.Header.Set("If-None-Match", etag)
 		w2 := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w2, req2)
-		
+
 		if w2.Code != http.StatusNotModified {
 			t.Errorf("Expected 304 Not Modified for matching ETag, got %d", w2.Code)
 		}
@@ -421,66 +421,66 @@ func TestSvelteHandler_VimeshStyleIntegration(t *testing.T) {
 func TestSvelteHandler_VimeshStyleDisabled(t *testing.T) {
 	// Create test filesystem
 	fs := filesystem.NewMemoryFileSystem()
-	
+
 	// Write a simple component
 	err := fs.WriteFile("routes/test.svelte", []byte(`<div class="bg-red-500">Test</div>`))
 	if err != nil {
 		t.Fatalf("Failed to write test component: %v", err)
 	}
-	
+
 	// Create config with Vimesh Style disabled
 	config := DefaultSvelteConfig()
 	config.VimeshStyle = &utils.VimeshStyleConfig{Enable: false}
-	
+
 	// Create router
 	router := mux.NewRouter()
-	
+
 	// Create handler with router
 	handler := NewSvelteHandlerWithRouter(fs, config, router)
-	
+
 	// Create route
 	route := Route{
 		Path:     "/test",
 		FilePath: "routes/test.svelte",
 		FileType: "svelte",
 	}
-	
+
 	// Register the component handler
 	router.HandleFunc(route.Path, handler.Handle(route)).Methods("GET")
-	
+
 	// Test that Vimesh Style route is not registered
 	t.Run("VimeshStyleRouteNotRegistered", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/svelte-vimesh-style.js", nil)
+		req := httptest.NewRequest("GET", "/svelte/vimesh-style.js", nil)
 		w := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w, req)
-		
+
 		// Should get 404 since route is not registered
 		if w.Code != http.StatusNotFound {
 			t.Errorf("Expected 404 for disabled Vimesh Style, got %d", w.Code)
 		}
 	})
-	
+
 	// Test that component doesn't include Vimesh Style
 	t.Run("ComponentWithoutVimeshStyle", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		w := httptest.NewRecorder()
-		
+
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		body := w.Body.String()
-		
+
 		// Should not include Vimesh Style CSS
 		if strings.Contains(body, `<style id="vimesh-styles">`) {
 			t.Error("Component should not include Vimesh Style CSS when disabled")
 		}
-		
+
 		// Should not include Vimesh Style script
-		if strings.Contains(body, "/svelte-vimesh-style.js") {
+		if strings.Contains(body, "/svelte/vimesh-style.js") {
 			t.Error("Component should not include Vimesh Style script when disabled")
 		}
 	})
@@ -491,12 +491,12 @@ func TestSvelteHandler_VimeshStyleDisabled(t *testing.T) {
 func TestTransformToIIFE(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
 	sh := NewSvelteHandler(fs)
-	
+
 	tests := []struct {
-		name           string
-		jsCode         string
-		componentName  string
-		shouldContain  []string
+		name             string
+		jsCode           string
+		componentName    string
+		shouldContain    []string
 		shouldNotContain []string
 	}{
 		{
@@ -509,8 +509,8 @@ class MyComponent extends SvelteComponent {
 	}
 }
 export default MyComponent;`,
-			componentName: "MyComponent",
-			shouldContain: []string{"class MyComponent extends SvelteComponent"},
+			componentName:    "MyComponent",
+			shouldContain:    []string{"class MyComponent extends SvelteComponent"},
 			shouldNotContain: []string{"import", "export default"},
 		},
 		{
@@ -523,8 +523,8 @@ class MyComponent extends SvelteComponent {
 	}
 }
 export default MyComponent`,
-			componentName: "MyComponent",
-			shouldContain: []string{"class MyComponent extends SvelteComponent"},
+			componentName:    "MyComponent",
+			shouldContain:    []string{"class MyComponent extends SvelteComponent"},
 			shouldNotContain: []string{"import", "export default"},
 		},
 		{
@@ -547,8 +547,8 @@ class Vimesh_test extends SvelteComponent {
 	}
 }
 export default Vimesh_test`,
-			componentName: "Vimesh_test",
-			shouldContain: []string{"class Vimesh_test extends SvelteComponent"},
+			componentName:    "Vimesh_test",
+			shouldContain:    []string{"class Vimesh_test extends SvelteComponent"},
 			shouldNotContain: []string{"import", "export default"},
 		},
 		{
@@ -558,31 +558,31 @@ import { onMount } from "svelte";
 import utils from "./utils";
 class Component extends SvelteComponent {}
 export default Component;`,
-			componentName: "Component",
-			shouldContain: []string{"class Component extends SvelteComponent"},
+			componentName:    "Component",
+			shouldContain:    []string{"class Component extends SvelteComponent"},
 			shouldNotContain: []string{"import", "export default"},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			imports := make(map[string]string)
 			result := sh.transformToIIFE(tt.jsCode, tt.componentName, imports, "routes/test.svelte")
-			
+
 			// Check that required content is present
 			for _, expected := range tt.shouldContain {
 				if !strings.Contains(result, expected) {
 					t.Errorf("Expected result to contain '%s', but it didn't.\nResult:\n%s", expected, result)
 				}
 			}
-			
+
 			// Check that unwanted content is removed
 			for _, unexpected := range tt.shouldNotContain {
 				if strings.Contains(result, unexpected) {
 					t.Errorf("Expected result NOT to contain '%s', but it did.\nResult:\n%s", unexpected, result)
 				}
 			}
-			
+
 			// Ensure no trailing/leading whitespace issues
 			trimmed := strings.TrimSpace(result)
 			if trimmed != result {
@@ -594,7 +594,7 @@ export default Component;`,
 
 func TestToComponentClassName(t *testing.T) {
 	sh := &SvelteHandler{}
-	
+
 	tests := []struct {
 		input    string
 		expected string
@@ -609,7 +609,7 @@ func TestToComponentClassName(t *testing.T) {
 		{"a", "A"},
 		{"test-component-name", "Test_component_name"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := sh.toComponentClassName(tt.input)
@@ -622,7 +622,7 @@ func TestToComponentClassName(t *testing.T) {
 
 func TestVimeshStyleMinification(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
-	
+
 	testCases := []struct {
 		name           string
 		minifyEnabled  bool
@@ -634,23 +634,23 @@ func TestVimeshStyleMinification(t *testing.T) {
 		{"Dev mode enabled", true, true, false},
 		{"Both disabled", false, true, false},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := DefaultSvelteConfig()
 			config.MinifyRuntime = tc.minifyEnabled
 			config.DevMode = tc.devMode
 			config.VimeshStyle = &utils.VimeshStyleConfig{Enable: true}
-			
+
 			handler := NewSvelteHandlerWithConfig(fs, config)
 			vimeshJS := handler.getMinifiedVimeshStyle()
-			
+
 			originalSize := len(utils.GetVimeshStyleJS())
 			minifiedSize := len(vimeshJS)
-			
+
 			if tc.expectMinified {
 				if minifiedSize >= originalSize {
-					t.Errorf("Expected minified version to be smaller: original=%d, minified=%d", 
+					t.Errorf("Expected minified version to be smaller: original=%d, minified=%d",
 						originalSize, minifiedSize)
 				}
 				// Should have some reasonable compression

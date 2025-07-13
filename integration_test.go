@@ -179,16 +179,16 @@ func TestServerIntegration(t *testing.T) {
 	
 	// Create server with memory filesystem
 	server := &Server{
-		router: mux.NewRouter(),
-		port:   8080,
-		fs:     memFS,
+		router:         mux.NewRouter(),
+		port:           8080,
+		fs:             memFS,
+		handlerManager: NewHandlerManager(memFS),
 	}
 	
-	// Setup routes and static server
+	// Setup routes (includes static server)
 	if err := server.setupRoutes(); err != nil {
 		t.Fatalf("Failed to setup routes: %v", err)
 	}
-	server.setupStaticFileServer()
 	
 	testCases := []struct {
 		name           string
@@ -316,9 +316,10 @@ func TestAPIEndpointsIntegration(t *testing.T) {
 	memFS := setupIntegrationMemoryFS()
 	
 	server := &Server{
-		router: mux.NewRouter(),
-		port:   8080,
-		fs:     memFS,
+		router:         mux.NewRouter(),
+		port:           8080,
+		fs:             memFS,
+		handlerManager: NewHandlerManager(memFS),
 	}
 	
 	if err := server.setupRoutes(); err != nil {

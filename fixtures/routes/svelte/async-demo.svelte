@@ -1,6 +1,6 @@
 <script>
     // Static imports for immediately needed components
-    import Button from './Button.svelte';
+    import Button from './_lib/Button.svelte';
     
     // State for dynamic loading
     let HeavyChart;
@@ -34,7 +34,7 @@
                 return;
             }
             // Use the SvelteAsync library which properly handles runtime context
-            HeavyChart = await SvelteAsync.import('HeavyChart');
+            HeavyChart = await SvelteAsync.import('./_lib/HeavyChart');
             chartLoaded = true;
         } catch (error) {
             console.error('Failed to load chart:', error);
@@ -53,7 +53,7 @@
                 return;
             }
             // Use the SvelteAsync library which properly handles runtime context
-            DataTable = await SvelteAsync.import('DataTable');
+            DataTable = await SvelteAsync.import('./_lib/DataTable');
             tableLoaded = true;
         } catch (error) {
             console.error('Failed to load table:', error);
@@ -68,7 +68,7 @@
         chartLoading = true;
         
         try {
-            HeavyChart = await SvelteAsync.import('HeavyChart');
+            HeavyChart = await SvelteAsync.import('./_lib/HeavyChart');
             chartLoaded = true;
         } catch (error) {
             console.error('Failed to load chart with library:', error);
@@ -82,7 +82,7 @@
         tableLoading = true;
         
         try {
-            DataTable = await SvelteAsync.import('DataTable');
+            DataTable = await SvelteAsync.import('./_lib/DataTable');
             tableLoaded = true;
         } catch (error) {
             console.error('Failed to load table with library:', error);
@@ -178,7 +178,7 @@
             <div class="approach">
                 <h3>Manual Fetch</h3>
                 <pre><code>// Fetch component manually
-const response = await fetch('/svelte/components/HeavyChart');
+const response = await fetch('/svelte/_lib/HeavyChart');
 const data = await response.json();
 const Component = new Function(data.js + '\nreturn ' + data.className + ';')();
 </code></pre>
@@ -187,9 +187,9 @@ const Component = new Function(data.js + '\nreturn ' + data.className + ';')();
             <div class="approach">
                 <h3>SvelteAsync Library</h3>
                 <pre><code>// Use the convenience library
-const Component = await SvelteAsync.import('HeavyChart');
+const Component = await SvelteAsync.import('./_lib/HeavyChart');
 // Or with lazy loading
-const LazyComponent = SvelteAsync.lazy(() => SvelteAsync.import('HeavyChart'));
+const LazyComponent = SvelteAsync.lazy(() => SvelteAsync.import('./_lib/HeavyChart'));
 </code></pre>
             </div>
         </div>

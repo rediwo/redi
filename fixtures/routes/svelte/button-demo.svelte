@@ -1,5 +1,5 @@
 <script>
-    import Button from './Button.svelte';
+    import Button from './_lib/Button.svelte';
     
     let clickCount = 0;
     let lastVariant = '';

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Gallery - HTML Template</title>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="mb-8">
+            <a href="/html" class="text-blue-600 hover:text-blue-800 mb-4 inline-block">← Back to HTML Demos</a>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Card Gallery</h1>
+            <p class="text-gray-600">Beautiful card layouts with responsive design</p>
+        </header>
+
+        <!-- Filter and Sort Controls -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                    <label class="block text-gray-700 font-medium mb-2">Category</label>
+                    <select
+                        id="categoryFilter"
+                        onchange="filterCards()"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">All Categories</option>
+                        <option value="nature">Nature</option>
+                        <option value="architecture">Architecture</option>
+                        <option value="technology">Technology</option>
+                        <option value="people">People</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-gray-700 font-medium mb-2">Sort By</label>
+                    <select
+                        id="sortBy"
+                        onchange="sortCards()"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="title">Title (A-Z)</option>
+                        <option value="popular">Most Popular</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-gray-700 font-medium mb-2">Layout</label>
+                    <div class="flex gap-2">
+                        <button
+                            onclick="setLayout('grid')"
+                            class="layout-btn flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            data-layout="grid"
+                        >
+                            Grid
+                        </button>
+                        <button
+                            onclick="setLayout('list')"
+                            class="layout-btn flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            data-layout="list"
+                        >
+                            List
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cards Container -->
+        <div id="cardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Cards will be dynamically added here -->
+        </div>
+
+        <!-- Load More Button -->
+        <div class="text-center mt-8">
+            <button
+                onclick="loadMore()"
+                id="loadMoreBtn"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-8 py-3 rounded-lg transition-colors"
+            >
+                Load More
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Generate sample card data
+        const categories = ['nature', 'architecture', 'technology', 'people'];
+        const titles = [
+            'Mountain Sunrise', 'Urban Skyline', 'Tech Innovation', 'Portrait Photography',
+            'Forest Trail', 'Modern Building', 'Digital Future', 'Street Life',
+            'Ocean Waves', 'Historic Architecture', 'AI Revolution', 'Cultural Diversity',
+            'Desert Landscape', 'City Lights', 'Quantum Computing', 'Community Spirit'
+        ];
+
+        let allCards = [];
+        for (let i = 1; i <= 50; i++) {
+            const category = categories[Math.floor(Math.random() * categories.length)];
+            const title = titles[Math.floor(Math.random() * titles.length)] + ' ' + i;
+            
+            allCards.push({
+                id: i,
+                title: title,
+                category: category,
+                description: `This is a sample description for ${title}. It demonstrates the card layout and responsive design.`,
+                date: new Date(Date.now() - Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000),
+                likes: Math.floor(Math.random() * 1000),
+                views: Math.floor(Math.random() * 5000),
+                imageColor: `hsl(${Math.random() * 360}, 70%, 60%)`
+            });
+        }
+
+        // State management
+        let displayedCards = [];
+        let filteredCards = [...allCards];
+        let currentLayout = 'grid';
+        let cardsPerLoad = 9;
+        let currentIndex = 0;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateLayoutButtons();
+            loadInitial();
+        });
+
+        // Filter cards
+        function filterCards() {
+            const category = document.getElementById('categoryFilter').value;
+            
+            if (category) {
+                filteredCards = allCards.filter(card => card.category === category);
+            } else {
+                filteredCards = [...allCards];
+            }
+
+            // Re-sort after filtering
+            sortCards();
+        }
+
+        // Sort cards
+        function sortCards() {
+            const sortBy = document.getElementById('sortBy').value;
+            
+            switch (sortBy) {
+                case 'newest':
+                    filteredCards.sort((a, b) => b.date - a.date);
+                    break;
+                case 'oldest':
+                    filteredCards.sort((a, b) => a.date - b.date);
+                    break;
+                case 'title':
+                    filteredCards.sort((a, b) => a.title.localeCompare(b.title));
+                    break;
+                case 'popular':
+                    filteredCards.sort((a, b) => b.likes - a.likes);
+                    break;
+            }
+
+            // Reset and reload
+            currentIndex = 0;
+            displayedCards = [];
+            loadInitial();
+        }
+
+        // Set layout
+        function setLayout(layout) {
+            currentLayout = layout;
+            updateLayoutButtons();
+            renderCards();
+        }
+
+        // Update layout buttons
+        function updateLayoutButtons() {
+            document.querySelectorAll('.layout-btn').forEach(btn => {
+                if (btn.dataset.layout === currentLayout) {
+                    btn.className = 'layout-btn flex-1 px-4 py-2 border border-blue-600 bg-blue-600 text-white rounded-lg transition-colors';
+                } else {
+                    btn.className = 'layout-btn flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors';
+                }
+            });
+        }
+
+        // Load initial cards
+        function loadInitial() {
+            currentIndex = 0;
+            displayedCards = [];
+            loadMore();
+        }
+
+        // Load more cards
+        function loadMore() {
+            const newCards = filteredCards.slice(currentIndex, currentIndex + cardsPerLoad);
+            displayedCards = [...displayedCards, ...newCards];
+            currentIndex += cardsPerLoad;
+
+            renderCards();
+
+            // Hide load more button if no more cards
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            if (currentIndex >= filteredCards.length) {
+                loadMoreBtn.style.display = 'none';
+            } else {
+                loadMoreBtn.style.display = 'block';
+            }
+        }
+
+        // Render cards
+        function renderCards() {
+            const container = document.getElementById('cardsContainer');
+            
+            if (currentLayout === 'grid') {
+                container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+                container.innerHTML = displayedCards.map(card => `
+                    <article class="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow overflow-hidden">
+                        <div class="h-48 flex items-center justify-center" style="background-color: ${card.imageColor}">
+                            <span class="text-white text-4xl font-bold">${card.title.charAt(0)}</span>
+                        </div>
+                        <div class="p-6">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                                    ${card.category}
+                                </span>
+                                <span class="text-xs text-gray-500">
+                                    ${card.date.toLocaleDateString()}
+                                </span>
+                            </div>
+                            <h3 class="text-xl font-semibold text-gray-800 mb-2">${card.title}</h3>
+                            <p class="text-gray-600 mb-4">${card.description}</p>
+                            <div class="flex items-center justify-between text-sm text-gray-500">
+                                <span>❤️ ${card.likes}</span>
+                                <span>👁️ ${card.views}</span>
+                            </div>
+                        </div>
+                    </article>
+                `).join('');
+            } else {
+                container.className = 'space-y-4';
+                container.innerHTML = displayedCards.map(card => `
+                    <article class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 flex gap-6">
+                        <div class="w-32 h-32 flex-shrink-0 rounded-lg flex items-center justify-center" style="background-color: ${card.imageColor}">
+                            <span class="text-white text-3xl font-bold">${card.title.charAt(0)}</span>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-4 mb-2">
+                                <span class="text-sm font-medium px-3 py-1 bg-blue-100 text-blue-800 rounded">
+                                    ${card.category}
+                                </span>
+                                <span class="text-sm text-gray-500">
+                                    ${card.date.toLocaleDateString()}
+                                </span>
+                            </div>
+                            <h3 class="text-2xl font-semibold text-gray-800 mb-2">${card.title}</h3>
+                            <p class="text-gray-600 mb-4">${card.description}</p>
+                            <div class="flex items-center gap-6 text-sm text-gray-500">
+                                <span>❤️ ${card.likes} likes</span>
+                                <span>👁️ ${card.views} views</span>
+                            </div>
+                        </div>
+                    </article>
+                `).join('');
+            }
+        }
+    </script>
+</body>
+</html>

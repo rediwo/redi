@@ -1,7 +1,7 @@
 <script>
-    import Button from './Button.svelte';
-    import Card from './Card.svelte';
-    import Icon from './_components/Icon.svelte';
+    import Button from './_lib/Button.svelte';
+    import Card from './_lib/Card.svelte';
+    import Icon from './_lib/Icon.svelte';
     
     let rating = 0;
     let favorites = [];

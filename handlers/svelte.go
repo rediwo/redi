@@ -42,18 +42,17 @@ type SvelteConfig struct {
 
 	// Runtime resource settings
 	UseExternalRuntime   bool          // Use external runtime file instead of inline
-	RuntimePath          string        // Path for runtime resource (default: "/svelte-runtime.js")
+	RuntimePath          string        // Path for runtime resource (default: "/svelte/runtime.js")
 	RuntimeCacheDuration time.Duration // Cache duration for runtime resource
 
 	// Async component loading settings
 	EnableAsyncLoading     bool          // Enable async component loading
-	ComponentAPIPath       string        // Path for component API (default: "/svelte/components")
 	ComponentCacheDuration time.Duration // Cache duration for component resources
-	AsyncLibraryPath       string        // Path for async library (default: "/svelte-async.js")
+	AsyncLibraryPath       string        // Path for async library (default: "/svelte/async.js")
 
 	// Vimesh Style settings
 	VimeshStyle     *utils.VimeshStyleConfig // Vimesh Style configuration
-	VimeshStylePath string                   // Path for Vimesh Style resource (default: "/svelte-vimesh-style.js")
+	VimeshStylePath string                   // Path for Vimesh Style resource (default: "/svelte/vimesh-style.js")
 }
 
 // DefaultSvelteConfig returns default Svelte settings
@@ -67,7 +66,6 @@ func DefaultSvelteConfig() *SvelteConfig {
 		RuntimePath:            "/svelte/runtime.js",
 		RuntimeCacheDuration:   365 * 24 * time.Hour, // 1 year
 		EnableAsyncLoading:     true,
-		ComponentAPIPath:       "/svelte/components",
 		ComponentCacheDuration: 24 * time.Hour, // 1 day
 		AsyncLibraryPath:       "/svelte/async.js",
 		VimeshStyle:            utils.DefaultVimeshStyleConfig(),
@@ -97,6 +95,8 @@ type SvelteHandler struct {
 	minifier            *minify.M
 	componentRegistry   map[string]*ComponentInfo // Registry for compiled components
 	registryMu          sync.RWMutex              // Mutex for component registry
+	importTransformer   *ImportTransformer        // Common import handling
+	routesDir           string                    // Routes directory path
 }
 
 type CachedResult struct {
@@ -155,12 +155,22 @@ func NewSvelteHandlerWithConfig(fs filesystem.FileSystem, config *SvelteConfig) 
 		config:            config,
 		minifier:          m,
 		componentRegistry: make(map[string]*ComponentInfo),
+		importTransformer: NewImportTransformer(fs),
+		routesDir:         "routes", // Default value
 	}
 }
 
 // NewSvelteHandlerWithRouter creates a SvelteHandler and registers runtime routes
 func NewSvelteHandlerWithRouter(fs filesystem.FileSystem, config *SvelteConfig, router *mux.Router) *SvelteHandler {
 	sh := NewSvelteHandlerWithConfig(fs, config)
+	sh.RegisterRoutes(router)
+	return sh
+}
+
+// NewSvelteHandlerWithRouterAndRoutesDir creates a SvelteHandler with custom routes directory
+func NewSvelteHandlerWithRouterAndRoutesDir(fs filesystem.FileSystem, config *SvelteConfig, router *mux.Router, routesDir string) *SvelteHandler {
+	sh := NewSvelteHandlerWithConfig(fs, config)
+	sh.routesDir = routesDir
 	sh.RegisterRoutes(router)
 	return sh
 }
@@ -178,11 +188,9 @@ func (sh *SvelteHandler) RegisterRoutes(router *mux.Router) {
 		log.Printf("Registered Svelte Vimesh Style route: %s", sh.config.VimeshStylePath)
 	}
 
-	// Register async component loading API if enabled
+	// Register async library if enabled
 	if sh.config.EnableAsyncLoading {
-		router.HandleFunc(sh.config.ComponentAPIPath+"/{component:.+}", sh.ServeAsyncComponent).Methods("GET", "HEAD")
 		router.HandleFunc(sh.config.AsyncLibraryPath, sh.ServeAsyncLibrary).Methods("GET", "HEAD")
-		log.Printf("Registered Svelte async component API route: %s", sh.config.ComponentAPIPath)
 		log.Printf("Registered Svelte async library route: %s", sh.config.AsyncLibraryPath)
 	}
 }
@@ -253,11 +261,10 @@ func (sh *SvelteHandler) ServeAsyncComponent(w http.ResponseWriter, r *http.Requ
 		componentPath += ".svelte"
 	}
 
-	// Resolve to routes directory
-	fullPath := filepath.Join("routes", componentPath)
+	// Use the existing component resolution logic
+	fullPath := sh.resolveAsyncComponentPath(componentPath, r)
 
-	// Check if file exists
-	if _, err := sh.fs.Stat(fullPath); err != nil {
+	if fullPath == "" {
 		response := AsyncComponentResponse{
 			Success: false,
 			Error:   "Component not found",
@@ -568,81 +575,18 @@ func (sh *SvelteHandler) resolveComponentPath(importPath string, currentPath str
 	return resolvedPath
 }
 
-// resolveAssetPath attempts to find an asset in various locations
-func (sh *SvelteHandler) resolveAssetPath(importPath string, currentPath string) (string, string) {
-	// For absolute imports starting with /, try public directory first
-	if strings.HasPrefix(importPath, "/") {
-		// Remove leading slash
-		trimmedPath := strings.TrimPrefix(importPath, "/")
-		
-		// Try in public directory first
-		publicPath := filepath.Join("public", trimmedPath)
-		if _, err := sh.fs.Stat(publicPath); err == nil {
-			return publicPath, sh.getAssetType(publicPath)
-		}
-		
-		// Try at root
-		if _, err := sh.fs.Stat(trimmedPath); err == nil {
-			return trimmedPath, sh.getAssetType(trimmedPath)
-		}
-		
-		// Try with routes prefix
-		routesPath := filepath.Join("routes", trimmedPath)
-		if _, err := sh.fs.Stat(routesPath); err == nil {
-			return routesPath, sh.getAssetType(routesPath)
-		}
-		
-		return "", ""
-	}
-	
-	// For relative imports, use the standard resolution
-	resolvedPath := sh.resolveComponentPath(importPath, currentPath)
-	if resolvedPath == "" {
-		return "", ""
+// resolveAsyncComponentPath resolves the path for an async component request
+func (sh *SvelteHandler) resolveAsyncComponentPath(componentPath string, r *http.Request) string {
+	// Simply resolve the component path relative to routesDir
+	fullPath := filepath.Join(sh.routesDir, componentPath)
+
+	// Check if the file exists
+	if _, err := sh.fs.Stat(fullPath); err == nil {
+		return fullPath
 	}
 
-	// Try the path as-is first
-	if _, err := sh.fs.Stat(resolvedPath); err == nil {
-		return resolvedPath, sh.getAssetType(resolvedPath)
-	}
-
-	// If not found, try common asset directories
-	// Try in public directory for static assets
-	publicPath := filepath.Join("public", resolvedPath)
-	if _, err := sh.fs.Stat(publicPath); err == nil {
-		return publicPath, sh.getAssetType(publicPath)
-	}
-
-	// Try without public prefix if the import already contains it
-	if strings.HasPrefix(resolvedPath, "public/") {
-		directPath := strings.TrimPrefix(resolvedPath, "public/")
-		if _, err := sh.fs.Stat(directPath); err == nil {
-			return directPath, sh.getAssetType(directPath)
-		}
-	}
-
-	return "", ""
-}
-
-// getAssetType determines the type of asset based on file extension
-func (sh *SvelteHandler) getAssetType(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".svelte":
-		return "svelte"
-	case ".js", ".mjs":
-		return "javascript"
-	case ".css":
-		return "stylesheet"
-	case ".json":
-		return "json"
-	case ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp":
-		return "image"
-	case ".woff", ".woff2", ".ttf", ".eot":
-		return "font"
-	default:
-		return "unknown"
-	}
+	// Not found
+	return ""
 }
 
 // getComponentInfo retrieves or compiles a component
@@ -673,7 +617,7 @@ func (sh *SvelteHandler) getComponentInfo(componentPath string) (*ComponentInfo,
 	// Parse imports
 	imports := sh.parseImports(contentStr)
 	dependencies := make([]string, 0)
-	
+
 	// Only add Svelte components as dependencies
 	for _, imp := range imports {
 		if strings.HasSuffix(imp, ".svelte") {
@@ -694,13 +638,19 @@ func (sh *SvelteHandler) getComponentInfo(componentPath string) (*ComponentInfo,
 	// Extract component name from filename
 	basename := filepath.Base(componentPath)
 	componentName := strings.TrimSuffix(basename, ".svelte")
-	className := sh.toComponentClassName(componentName)
+
+	// Extract the actual class name from compiled JS
+	actualClassName := sh.extractActualClassName(result.JS)
+	if actualClassName == "" {
+		// Fallback to calculated name if extraction fails
+		actualClassName = sh.toComponentClassName(componentName)
+	}
 
 	// Create component info
 	info = &ComponentInfo{
 		FilePath:     componentPath,
 		Name:         componentName,
-		ClassName:    className,
+		ClassName:    actualClassName,
 		CompiledJS:   result.JS,
 		CompiledCSS:  result.CSS,
 		Dependencies: dependencies,
@@ -1011,6 +961,19 @@ func (sh *SvelteHandler) toComponentClassName(componentName string) string {
 	return className
 }
 
+// extractActualClassName extracts the actual component class name from compiled Svelte JS
+func (sh *SvelteHandler) extractActualClassName(compiledJS string) string {
+	// Look for "class ClassName extends SvelteComponent"
+	classRegex := regexp.MustCompile(`class\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+SvelteComponent`)
+	matches := classRegex.FindStringSubmatch(compiledJS)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	// Fallback: return empty string if no class found
+	return ""
+}
+
 // collectAllDependencies recursively collects all component dependencies
 func (sh *SvelteHandler) collectAllDependencies(componentPath string, visited map[string]bool) ([]*ComponentInfo, error) {
 	if visited == nil {
@@ -1048,41 +1011,23 @@ func (sh *SvelteHandler) collectAllDependencies(componentPath string, visited ma
 
 // transformToIIFE transforms ES6 module code to IIFE, preserving imports for resolution
 func (sh *SvelteHandler) transformToIIFE(jsCode string, componentClassName string, imports map[string]string, componentPath string) string {
-	// Extract all import information before removing them
-	importRegex := regexp.MustCompile(`import\s+(\w+)\s+from\s+["']([^"']+)["'];?\s*`)
-	matches := importRegex.FindAllStringSubmatch(jsCode, -1)
+	// Use the common import transformer to handle all imports
+	var componentImports map[string]string
+	jsCode, componentImports = sh.importTransformer.TransformImports(jsCode, componentPath, []string{".svelte"})
 
-	// Build import mappings and handle non-Svelte imports
-	for _, match := range matches {
-		if len(match) >= 3 {
-			importName := match[1]
-			importPath := match[2]
-			
-			if strings.HasSuffix(importPath, ".svelte") {
-				// Svelte components are handled via component registry
-				imports[importName] = importPath
-			} else {
-				// Other assets need URL resolution
-				assetPath, assetType := sh.resolveAssetPath(importPath, componentPath)
-				if assetPath != "" && assetType != "unknown" {
-					// Replace import with URL or inline content based on type
-					jsCode = sh.replaceAssetImport(jsCode, importName, importPath, assetPath, assetType)
-				} else {
-					log.Printf("Warning: Could not resolve asset import '%s' from '%s'", importPath, componentPath)
-				}
-			}
-		}
+	// Merge Svelte component imports into the imports map
+	for name, path := range componentImports {
+		imports[name] = path
 	}
 
-	// Remove all types of import statements
-	importRegex1 := regexp.MustCompile(`import\s*{[^}]+}\s*from\s*["'][^"']+["'];?\s*`)
-	jsCode = importRegex1.ReplaceAllString(jsCode, "")
+	// Remove ALL Svelte framework imports (they'll be provided by runtime)
+	// This includes svelte/internal, svelte/store, etc.
+	svelteImportRegex := regexp.MustCompile(`import\s*{[^}]*}\s*from\s*["']svelte[^"']*["'];?\s*`)
+	jsCode = svelteImportRegex.ReplaceAllString(jsCode, "")
 
-	importRegex2 := regexp.MustCompile(`import\s+\w+\s+from\s*["'][^"']+["'];?\s*`)
-	jsCode = importRegex2.ReplaceAllString(jsCode, "")
-
-	importRegex3 := regexp.MustCompile(`import\s*["'][^"']+["'];?\s*`)
-	jsCode = importRegex3.ReplaceAllString(jsCode, "")
+	// Also remove any bare svelte imports
+	bareSvelteImportRegex := regexp.MustCompile(`import\s+\w+\s+from\s*["']svelte[^"']*["'];?\s*`)
+	jsCode = bareSvelteImportRegex.ReplaceAllString(jsCode, "")
 
 	// Remove export default statement - handle both forms:
 	// 1. export default ComponentName;
@@ -1097,79 +1042,23 @@ func (sh *SvelteHandler) transformToIIFE(jsCode string, componentClassName strin
 	return jsCode
 }
 
-// replaceAssetImport handles non-Svelte asset imports
-func (sh *SvelteHandler) replaceAssetImport(jsCode, importName, importPath, assetPath, assetType string) string {
-	var replacement string
-	
-	// Generate the public URL for the asset
-	publicURL := sh.getPublicURL(assetPath)
-	
-	switch assetType {
-	case "image", "font":
-		// For images and fonts, replace with URL string
-		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-	case "stylesheet":
-		// For CSS, we could inject a link tag or return URL
-		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-	case "javascript":
-		// For JS modules, this is more complex - for now just provide URL
-		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-	case "json":
-		// For JSON, try to inline the content if it's not too large
-		const maxJSONSize = 100 * 1024 // 100KB limit
-		
-		// Try to read the JSON file
-		jsonData, err := sh.fs.ReadFile(assetPath)
-		if err != nil {
-			// If we can't read it, fall back to URL
-			log.Printf("Warning: Could not read JSON file '%s': %v", assetPath, err)
-			replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-		} else if len(jsonData) > maxJSONSize {
-			// If file is too large, use URL instead
-			log.Printf("JSON file '%s' is too large (%d bytes), using URL instead", assetPath, len(jsonData))
-			replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-		} else {
-			// Validate JSON
-			var jsonObj interface{}
-			if err := json.Unmarshal(jsonData, &jsonObj); err != nil {
-				log.Printf("Warning: Invalid JSON in file '%s': %v", assetPath, err)
-				replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-			} else {
-				// Inline the JSON data
-				replacement = fmt.Sprintf("const %s = %s;", importName, string(jsonData))
-			}
-		}
-	default:
-		replacement = fmt.Sprintf("const %s = '%s';", importName, publicURL)
-	}
-	
-	// Replace the specific import statement
-	importPattern := fmt.Sprintf(`import\s+%s\s+from\s+["']%s["'];?\s*`, importName, regexp.QuoteMeta(importPath))
-	re := regexp.MustCompile(importPattern)
-	return re.ReplaceAllString(jsCode, replacement+"\n")
-}
-
-// getPublicURL converts a filesystem path to a public URL
-func (sh *SvelteHandler) getPublicURL(assetPath string) string {
-	// Remove public/ prefix if present
-	if strings.HasPrefix(assetPath, "public/") {
-		return "/" + strings.TrimPrefix(assetPath, "public/")
-	}
-	// For paths in routes/, we might need different handling
-	if strings.HasPrefix(assetPath, "routes/") {
-		return "/" + strings.TrimPrefix(assetPath, "routes/")
-	}
-	// Default: assume it's relative to root
-	return "/" + assetPath
-}
-
 func (sh *SvelteHandler) generateHTMLWithRuntime(result *SvelteCompileResult, componentName string, svelteSource string, allComponents []*ComponentInfo, componentPath string) string {
 	// Remove .svelte extension
 	componentName = strings.TrimSuffix(componentName, ".svelte")
 
-	// Convert component name to class name format (handle hyphens)
-	// vimesh-test -> Vimesh_test
-	componentClassName := sh.toComponentClassName(componentName)
+	// Find the main component in allComponents to get the actual class name
+	var componentClassName string
+	for _, comp := range allComponents {
+		if comp.FilePath == componentPath {
+			componentClassName = comp.ClassName
+			break
+		}
+	}
+
+	// Fallback to calculated name if not found in components
+	if componentClassName == "" {
+		componentClassName = sh.toComponentClassName(componentName)
+	}
 
 	// Build import mappings for main component
 	imports := make(map[string]string)
@@ -1326,4 +1215,109 @@ func (sh *SvelteHandler) generateHTMLWithRuntime(result *SvelteCompileResult, co
 </html>`
 
 	return html
+}
+
+// CanHandle implements ComponentHandler interface
+func (sh *SvelteHandler) CanHandle(requestPath string) bool {
+	// Only handle paths that contain underscore (component paths)
+	if !strings.Contains(requestPath, "/_") {
+		return false
+	}
+
+	// Check if the corresponding .svelte file exists
+	filePath := sh.routesDir + requestPath + ".svelte"
+	_, err := sh.fs.Stat(filePath)
+	return err == nil
+}
+
+// ServeComponent implements ComponentHandler interface
+func (sh *SvelteHandler) ServeComponent(w http.ResponseWriter, r *http.Request) {
+	// Extract component path from request
+	requestPath := r.URL.Path
+	filePath := sh.routesDir + requestPath + ".svelte"
+
+	// Check if file exists first
+	_, err := sh.fs.Stat(filePath)
+	if err != nil {
+		response := AsyncComponentResponse{
+			Success: false,
+			Error:   "Component not found",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Reuse existing async component logic
+	info, err := sh.getComponentInfo(filePath)
+	if err != nil {
+		response := AsyncComponentResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to compile component: %v", err),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Transform component to IIFE format
+	imports := make(map[string]string)
+	jsCode := sh.transformToIIFE(info.CompiledJS, info.ClassName, imports, info.FilePath)
+
+	// Wrap the component code
+	jsCode = `/* Component: ` + info.Name + ` */
+` + jsCode
+
+	jsCode = sh.minifyComponentCode(jsCode)
+
+	// Create response
+	response := AsyncComponentResponse{
+		Success:   true,
+		Component: info.Name,
+		ClassName: info.ClassName,
+		JS:        jsCode,
+		CSS:       sh.minifyCSS(info.CompiledCSS),
+	}
+
+	// Add dependencies if requested
+	if r.URL.Query().Get("include_deps") == "true" {
+		for _, depPath := range info.Dependencies {
+			depInfo, err := sh.getComponentInfo(depPath)
+			if err != nil {
+				continue // Skip failed dependencies
+			}
+
+			depImports := make(map[string]string)
+			depJS := sh.transformToIIFE(depInfo.CompiledJS, depInfo.ClassName, depImports, depInfo.FilePath)
+			depJS = sh.minifyComponentCode(depJS)
+
+			depResponse := AsyncComponentResponse{
+				Success:   true,
+				Component: depInfo.Name,
+				ClassName: depInfo.ClassName,
+				JS:        depJS,
+				CSS:       sh.minifyCSS(depInfo.CompiledCSS),
+			}
+			response.Dependencies = append(response.Dependencies, depResponse)
+		}
+	}
+
+	// Set caching headers
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(sh.config.ComponentCacheDuration.Seconds())))
+
+	// Calculate ETag based on component content
+	hash := md5.Sum([]byte(info.ContentHash))
+	etag := `"` + hex.EncodeToString(hash[:]) + `"`
+	w.Header().Set("ETag", etag)
+
+	// Check if client has cached version
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

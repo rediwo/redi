@@ -16,8 +16,9 @@ Redi is a Go-based web development toolkit that provides a dynamic web server (`
 - **Static File Serving**: Efficient serving from `public/` directory
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **JavaScript Engine Pooling**: High-performance concurrent request handling
-- **Vimesh Style Integration**: Lightweight CSS generation for Svelte components
+- **Vimesh Style Integration**: Lightweight CSS generation for Svelte components and HTML templates
 - **Gzip Compression**: Automatic response compression for better performance
+- **Custom Error Pages**: Beautiful error pages with template support (404, 500, etc.)
 
 ### Rejs JavaScript Runtime
 - **Node.js Compatible**: Supports CommonJS modules and npm packages
@@ -72,6 +73,13 @@ go build -o redi ./cmd/redi
 go build -o rejs ./cmd/rejs
 go build -o redi-build ./cmd/redi-build
 ```
+
+## 📊 Framework Support
+
+### Component Frameworks
+- **Svelte**: Full support with server-side compilation, enhanced imports, and Vimesh Style integration
+
+Redi focuses on Svelte as the primary component framework, providing deep integration and optimal performance.
 
 ## 🎯 Quick Start
 
@@ -213,6 +221,36 @@ redi --root=mysite --port=8080
 # Run in background with logging
 redi --root=mysite --port=8080 --log=server.log
 ```
+
+### Custom Error Pages
+
+Create beautiful error pages in your routes directory:
+
+**routes/404.html:**
+```html
+{{layout 'base'}}
+
+<div class="min-h-screen flex items-center justify-center bg-gray-100">
+    <div class="text-center">
+        <h1 class="text-6xl font-bold text-gray-800">{{.Status}}</h1>
+        <h2 class="text-2xl font-semibold text-gray-600 mt-4">{{.StatusText}}</h2>
+        <p class="text-gray-500 mt-2">{{.Message}}</p>
+        <div class="mt-6">
+            <p class="text-sm text-gray-400">Requested: {{.Path}}</p>
+            <a href="/" class="mt-4 inline-block bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">
+                Go Home
+            </a>
+        </div>
+    </div>
+</div>
+```
+
+Error pages support:
+- Template layouts
+- Go template syntax
+- Vimesh Style CSS utilities
+- Custom styling
+- Generic pages (4xx.html, 5xx.html)
 
 ### Rejs JavaScript Runtime
 

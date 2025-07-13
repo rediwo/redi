@@ -39,8 +39,9 @@ func generateSessionID(r *http.Request) string {
 }
 
 type JavaScriptHandler struct {
-	fs      filesystem.FileSystem
-	version string
+	fs           filesystem.FileSystem
+	version      string
+	errorHandler *ErrorHandler
 }
 
 func NewJavaScriptHandler(fs filesystem.FileSystem) *JavaScriptHandler {
@@ -52,6 +53,10 @@ func NewJavaScriptHandlerWithVersion(fs filesystem.FileSystem, version string) *
 		fs:      fs,
 		version: version,
 	}
+}
+
+func (jh *JavaScriptHandler) SetErrorHandler(eh *ErrorHandler) {
+	jh.errorHandler = eh
 }
 
 func (jh *JavaScriptHandler) Handle(route Route) http.HandlerFunc {
@@ -77,13 +82,30 @@ func (jh *JavaScriptHandler) Handle(route Route) http.HandlerFunc {
 			// Handle different types of errors appropriately
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "failed to read file") || strings.Contains(errMsg, "failed to stat file") || strings.Contains(errMsg, "no such file") || strings.Contains(errMsg, "file does not exist") {
-				http.Error(w, fmt.Sprintf("JavaScript file not found: %s (Path: %s, Method: %s)", route.FilePath, r.URL.Path, r.Method), http.StatusNotFound)
+				if jh.errorHandler != nil {
+					jh.errorHandler.ServeError(w, r, http.StatusNotFound, fmt.Sprintf("JavaScript file not found: %s", route.FilePath))
+				} else {
+					http.Error(w, fmt.Sprintf("JavaScript file not found: %s (Path: %s, Method: %s)", route.FilePath, r.URL.Path, r.Method), http.StatusNotFound)
+				}
 			} else if strings.Contains(errMsg, "failed to compile") || strings.Contains(errMsg, "parsing error") {
-				http.Error(w, fmt.Sprintf("JavaScript syntax error in %s: %v", route.FilePath, err), http.StatusInternalServerError)
+				if jh.errorHandler != nil {
+					jh.errorHandler.Handle500(w, r, fmt.Errorf("JavaScript syntax error in %s: %v", route.FilePath, err))
+				} else {
+					http.Error(w, fmt.Sprintf("JavaScript syntax error in %s: %v", route.FilePath, err), http.StatusInternalServerError)
+				}
 			} else if methodName, found := strings.CutPrefix(errMsg, "method_not_allowed:"); found {
-				http.Error(w, fmt.Sprintf("Method %s not allowed for %s (available methods can be checked in %s)", strings.ToUpper(methodName), r.URL.Path, route.FilePath), http.StatusMethodNotAllowed)
+				message := fmt.Sprintf("Method %s not allowed for %s", strings.ToUpper(methodName), r.URL.Path)
+				if jh.errorHandler != nil {
+					jh.errorHandler.ServeError(w, r, http.StatusMethodNotAllowed, message)
+				} else {
+					http.Error(w, message, http.StatusMethodNotAllowed)
+				}
 			} else {
-				http.Error(w, fmt.Sprintf("JavaScript execution error in %s: %v", route.FilePath, err), http.StatusInternalServerError)
+				if jh.errorHandler != nil {
+					jh.errorHandler.Handle500(w, r, fmt.Errorf("JavaScript execution error in %s: %v", route.FilePath, err))
+				} else {
+					http.Error(w, fmt.Sprintf("JavaScript execution error in %s: %v", route.FilePath, err), http.StatusInternalServerError)
+				}
 			}
 		}
 	}
