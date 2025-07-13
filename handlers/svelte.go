@@ -16,6 +16,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/gorilla/mux"
+	"github.com/rediwo/redi/cache"
 	"github.com/rediwo/redi/filesystem"
 	"github.com/rediwo/redi/utils"
 	"github.com/tdewolff/minify/v2"
@@ -97,6 +98,7 @@ type SvelteHandler struct {
 	registryMu          sync.RWMutex              // Mutex for component registry
 	importTransformer   *ImportTransformer        // Common import handling
 	routesDir           string                    // Routes directory path
+	persistentCache     *cache.SvelteCache        // Persistent disk cache
 }
 
 type CachedResult struct {
@@ -130,6 +132,7 @@ type ComponentInfo struct {
 	Dependencies []string  // Import dependencies
 	LastModified time.Time // Last modification time
 	ContentHash  string    // Hash of source content
+	WasFromCache bool      // Whether this component was loaded from cache
 }
 
 func NewSvelteHandler(fs filesystem.FileSystem) *SvelteHandler {
@@ -173,6 +176,111 @@ func NewSvelteHandlerWithRouterAndRoutesDir(fs filesystem.FileSystem, config *Sv
 	sh.routesDir = routesDir
 	sh.RegisterRoutes(router)
 	return sh
+}
+
+// SetPersistentCache sets the persistent cache for the handler
+func (sh *SvelteHandler) SetPersistentCache(cache *cache.SvelteCache) {
+	sh.persistentCache = cache
+}
+
+// generateConfigHash generates a hash of the current configuration for cache invalidation
+func (sh *SvelteHandler) generateConfigHash() string {
+	return sh.calculateConfigHash()
+}
+
+// compileWithCache compiles a Svelte component using the persistent cache if available
+func (sh *SvelteHandler) compileWithCache(filePath string, source string) (*cache.SvelteCacheEntry, error) {
+	if sh.persistentCache == nil {
+		// No persistent cache, compile directly
+		start := time.Now()
+		result, err := sh.compileSvelte(source, filePath)
+		if err != nil {
+			return nil, err
+		}
+		
+		// Extract component name and class name
+		basename := filepath.Base(filePath)
+		componentName := strings.TrimSuffix(basename, ".svelte")
+		className := sh.extractActualClassName(result.JS)
+		if className == "" {
+			className = sh.toComponentClassName(componentName)
+		}
+		
+		// Parse imports and dependencies
+		imports := sh.parseImports(source)
+		dependencies := make([]string, 0)
+		for _, imp := range imports {
+			if strings.HasSuffix(imp, ".svelte") {
+				resolvedPath := sh.resolveComponentPath(imp, filePath)
+				if resolvedPath != "" {
+					dependencies = append(dependencies, resolvedPath)
+				}
+			}
+		}
+		
+		return &cache.SvelteCacheEntry{
+			Path:         filePath,
+			JavaScript:   result.JS,
+			CSS:          result.CSS,
+			ClassName:    className,
+			Dependencies: dependencies,
+			CompileTime:  time.Since(start),
+			Timestamp:    time.Now(),
+			IsMinified:   false,
+		}, nil
+	}
+	
+	// Use persistent cache
+	configHash := sh.generateConfigHash()
+	return sh.persistentCache.CompileWithCache(
+		filePath,
+		[]byte(source),
+		configHash,
+		func() (*cache.SvelteCacheEntry, error) {
+			start := time.Now()
+			result, err := sh.compileSvelte(source, filePath)
+			if err != nil {
+				return nil, err
+			}
+			
+			// Extract component name and class name
+			basename := filepath.Base(filePath)
+			componentName := strings.TrimSuffix(basename, ".svelte")
+			className := sh.extractActualClassName(result.JS)
+			if className == "" {
+				className = sh.toComponentClassName(componentName)
+			}
+			
+			// Parse imports and dependencies
+			imports := sh.parseImports(source)
+			dependencies := make([]string, 0)
+			for _, imp := range imports {
+				if strings.HasSuffix(imp, ".svelte") {
+					resolvedPath := sh.resolveComponentPath(imp, filePath)
+					if resolvedPath != "" {
+						dependencies = append(dependencies, resolvedPath)
+					}
+				}
+			}
+			
+			// Check if Vimesh Style is enabled and extract classes
+			hasVimeshStyle := sh.config.VimeshStyle != nil && sh.config.VimeshStyle.Enable
+			
+			return &cache.SvelteCacheEntry{
+				Path:           filePath,
+				Hash:           sh.calculateMD5(source),
+				ConfigHash:     configHash,
+				JavaScript:     result.JS,
+				CSS:            result.CSS,
+				ClassName:      className,
+				Dependencies:   dependencies,
+				CompileTime:    time.Since(start),
+				Timestamp:      time.Now(),
+				HasVimeshStyle: hasVimeshStyle,
+				IsMinified:     false,
+			}, nil
+		},
+	)
 }
 
 // RegisterRoutes registers Svelte-related routes
@@ -334,6 +442,16 @@ func (sh *SvelteHandler) ServeAsyncComponent(w http.ResponseWriter, r *http.Requ
 	// Set caching headers
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(sh.config.ComponentCacheDuration.Seconds())))
+	
+	// Set X-Svelte-Cached header based on whether component was loaded from cache
+	if info.WasFromCache {
+		w.Header().Set("X-Svelte-Cached", "true")
+	} else {
+		w.Header().Set("X-Svelte-Cached", "false")
+	}
+	
+	// Expose custom headers to JavaScript via CORS
+	w.Header().Set("Access-Control-Expose-Headers", "X-Svelte-Cached")
 
 	// Calculate ETag based on component content
 	hash := md5.Sum([]byte(info.ContentHash))
@@ -601,11 +719,13 @@ func (sh *SvelteHandler) getComponentInfo(componentPath string) (*ComponentInfo,
 		// Check if file has been modified
 		stat, err := sh.fs.Stat(componentPath)
 		if err == nil && !stat.ModTime().After(info.LastModified) {
+			// Component is from memory registry (already loaded)
+			// Keep the existing WasFromCache value - don't change it
 			return info, nil
 		}
 	}
 
-	// Read and compile the component
+	// Read the component file
 	content, err := sh.fs.ReadFile(componentPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read component %s: %w", componentPath, err)
@@ -614,48 +734,77 @@ func (sh *SvelteHandler) getComponentInfo(componentPath string) (*ComponentInfo,
 	contentStr := string(content)
 	contentHash := sh.calculateMD5(contentStr)
 
-	// Parse imports
-	imports := sh.parseImports(contentStr)
-	dependencies := make([]string, 0)
+	// Track if component was loaded from cache
+	wasFromCache := false
 
-	// Only add Svelte components as dependencies
-	for _, imp := range imports {
-		if strings.HasSuffix(imp, ".svelte") {
-			resolvedPath := sh.resolveComponentPath(imp, componentPath)
-			if resolvedPath != "" {
-				dependencies = append(dependencies, resolvedPath)
+	// Try to compile with cache
+	var cacheEntry *cache.SvelteCacheEntry
+	if sh.persistentCache != nil {
+		// Compile with cache (this will either hit or miss the cache)
+		cacheEntry, err = sh.compileWithCache(componentPath, contentStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile component %s: %w", componentPath, err)
+		}
+		
+		// Use the WasFromCache field from the cache entry
+		wasFromCache = cacheEntry.WasFromCache
+	} else {
+		// No persistent cache, compile directly
+		result, err := sh.compileSvelte(contentStr, componentPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile component %s: %w", componentPath, err)
+		}
+
+		// Parse imports
+		imports := sh.parseImports(contentStr)
+		dependencies := make([]string, 0)
+
+		// Only add Svelte components as dependencies
+		for _, imp := range imports {
+			if strings.HasSuffix(imp, ".svelte") {
+				resolvedPath := sh.resolveComponentPath(imp, componentPath)
+				if resolvedPath != "" {
+					dependencies = append(dependencies, resolvedPath)
+				}
 			}
 		}
-		// Other asset types are handled during HTML generation
-	}
 
-	// Compile the component
-	result, err := sh.compileSvelte(contentStr, componentPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile component %s: %w", componentPath, err)
+		// Extract component name from filename
+		basename := filepath.Base(componentPath)
+		componentName := strings.TrimSuffix(basename, ".svelte")
+
+		// Extract the actual class name from compiled JS
+		actualClassName := sh.extractActualClassName(result.JS)
+		if actualClassName == "" {
+			// Fallback to calculated name if extraction fails
+			actualClassName = sh.toComponentClassName(componentName)
+		}
+
+		cacheEntry = &cache.SvelteCacheEntry{
+			Path:         componentPath,
+			JavaScript:   result.JS,
+			CSS:          result.CSS,
+			ClassName:    actualClassName,
+			Dependencies: dependencies,
+		}
+		wasFromCache = false
 	}
 
 	// Extract component name from filename
 	basename := filepath.Base(componentPath)
 	componentName := strings.TrimSuffix(basename, ".svelte")
 
-	// Extract the actual class name from compiled JS
-	actualClassName := sh.extractActualClassName(result.JS)
-	if actualClassName == "" {
-		// Fallback to calculated name if extraction fails
-		actualClassName = sh.toComponentClassName(componentName)
-	}
-
-	// Create component info
+	// Create component info from cache entry
 	info = &ComponentInfo{
 		FilePath:     componentPath,
 		Name:         componentName,
-		ClassName:    actualClassName,
-		CompiledJS:   result.JS,
-		CompiledCSS:  result.CSS,
-		Dependencies: dependencies,
+		ClassName:    cacheEntry.ClassName,
+		CompiledJS:   cacheEntry.JavaScript,
+		CompiledCSS:  cacheEntry.CSS,
+		Dependencies: cacheEntry.Dependencies,
 		LastModified: time.Now(),
 		ContentHash:  contentHash,
+		WasFromCache: wasFromCache,
 	}
 
 	// Store in registry
@@ -912,11 +1061,29 @@ func (sh *SvelteHandler) Handle(route Route) http.HandlerFunc {
 
 		log.Printf("Compiling Svelte component: %s (hash: %s) with %d dependencies", route.FilePath, contentHash, len(allComponents)-1)
 
-		// Compile the Svelte component
-		result, err := sh.compileSvelte(contentStr, route.FilePath)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Svelte compilation error: %v", err), http.StatusInternalServerError)
-			return
+		// Compile using cache if available
+		var result *SvelteCompileResult
+		var wasCompiledFromCache bool
+		if sh.persistentCache != nil {
+			// Use persistent cache
+			cacheEntry, err := sh.compileWithCache(route.FilePath, contentStr)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Svelte compilation error: %v", err), http.StatusInternalServerError)
+				return
+			}
+			result = &SvelteCompileResult{
+				JS:  cacheEntry.JavaScript,
+				CSS: cacheEntry.CSS,
+			}
+			wasCompiledFromCache = cacheEntry.WasFromCache
+		} else {
+			// No persistent cache, compile directly
+			result, err = sh.compileSvelte(contentStr, route.FilePath)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Svelte compilation error: %v", err), http.StatusInternalServerError)
+				return
+			}
+			wasCompiledFromCache = false
 		}
 
 		// Generate HTML response with embedded runtime and all dependencies
@@ -934,7 +1101,11 @@ func (sh *SvelteHandler) Handle(route Route) http.HandlerFunc {
 
 		// Send the response
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("X-Svelte-Cached", "false")
+		if wasCompiledFromCache {
+			w.Header().Set("X-Svelte-Cached", "true")
+		} else {
+			w.Header().Set("X-Svelte-Cached", "false")
+		}
 		w.Write([]byte(html))
 	}
 }
@@ -1307,6 +1478,16 @@ func (sh *SvelteHandler) ServeComponent(w http.ResponseWriter, r *http.Request) 
 	// Set caching headers
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(sh.config.ComponentCacheDuration.Seconds())))
+	
+	// Set X-Svelte-Cached header based on whether component was loaded from cache
+	if info.WasFromCache {
+		w.Header().Set("X-Svelte-Cached", "true")
+	} else {
+		w.Header().Set("X-Svelte-Cached", "false")
+	}
+	
+	// Expose custom headers to JavaScript via CORS
+	w.Header().Set("Access-Control-Expose-Headers", "X-Svelte-Cached")
 
 	// Calculate ETag based on component content
 	hash := md5.Sum([]byte(info.ContentHash))
@@ -1320,4 +1501,49 @@ func (sh *SvelteHandler) ServeComponent(w http.ResponseWriter, r *http.Request) 
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+
+// PrecompileComponent pre-compiles a Svelte component and stores it in cache
+func (sh *SvelteHandler) PrecompileComponent(filePath string, content string) error {
+	// Use the existing compile with cache mechanism
+	_, err := sh.compileWithCache(filePath, content)
+	return err
+}
+
+// GetAllSvelteFiles returns all Svelte files in the routes directory
+func (sh *SvelteHandler) GetAllSvelteFiles() ([]string, error) {
+	var files []string
+	err := sh.scanForSvelteFiles(sh.routesDir, &files)
+	return files, err
+}
+
+// scanForSvelteFiles recursively scans for Svelte files
+func (sh *SvelteHandler) scanForSvelteFiles(dir string, files *[]string) error {
+	entries, err := sh.fs.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	
+	for _, entry := range entries {
+		name := entry.Name()
+		
+		// Only skip hidden files and directories (starting with .)
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		
+		path := filepath.Join(dir, name)
+		
+		if entry.IsDir() {
+			// Recursively scan all subdirectories
+			if err := sh.scanForSvelteFiles(path, files); err != nil {
+				return err
+			}
+		} else if strings.HasSuffix(name, ".svelte") {
+			*files = append(*files, path)
+		}
+	}
+	
+	return nil
 }

@@ -44,3 +44,7 @@ func (efs *EmbedFileSystem) GetRoot() string {
 	// Embedded filesystems don't have a traditional root path
 	return "."
 }
+
+func (efs *EmbedFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
+	return fs.ReadDir(efs.embedFS, dirname)
+}

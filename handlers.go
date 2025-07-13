@@ -131,3 +131,8 @@ func (crh *ComponentRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	// This should never happen, but just in case
 	http.NotFound(w, r)
 }
+
+// GetSvelteHandler returns the Svelte handler
+func (hm *HandlerManager) GetSvelteHandler() *handlers.SvelteHandler {
+	return hm.svelteHandler
+}

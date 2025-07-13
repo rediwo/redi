@@ -29,6 +29,10 @@ func main() {
 	var logFile string
 	var daemon bool
 	var disableGzip bool
+	var enableCache bool
+	var clearCache bool
+	var prebuild bool
+	var prebuildParallel int
 
 	flag.StringVar(&root, "root", "", "Root directory containing public and routes folders")
 	flag.IntVar(&port, "port", 8080, "Port to serve on")
@@ -36,6 +40,10 @@ func main() {
 	flag.StringVar(&logFile, "log", "", "Log file path (enables background mode like nohup)")
 	flag.BoolVar(&daemon, "daemon", false, "Internal flag for daemon mode")
 	flag.BoolVar(&disableGzip, "disable-gzip", false, "Disable gzip compression")
+	flag.BoolVar(&enableCache, "cache", true, "Enable compilation cache")
+	flag.BoolVar(&clearCache, "clear-cache", false, "Clear existing cache and exit")
+	flag.BoolVar(&prebuild, "prebuild", false, "Pre-compile all Svelte components before starting server")
+	flag.IntVar(&prebuildParallel, "prebuild-parallel", 4, "Number of parallel workers for pre-building (default: 4)")
 
 	// Custom usage message
 	flag.Usage = func() {
@@ -46,6 +54,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s --root=mysite --port=8080          # Run in foreground\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --root=mysite --log=server.log     # Run in background (like nohup)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --cache              # Enable compilation cache\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --clear-cache        # Clear cache and exit\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --prebuild           # Pre-compile all Svelte components\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --root=mysite --prebuild --port=8080  # Pre-build then start server\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --version                          # Show version\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nWhen using --log, the server runs in background mode and all output\n")
 		fmt.Fprintf(os.Stderr, "is redirected to the log file. A PID file (.pid) is also created.\n")
@@ -71,17 +83,35 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Handle cache clearing
+	if clearCache {
+		cachePath := root + "/.redi"
+		if err := os.RemoveAll(cachePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error clearing cache: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Cache cleared successfully: %s\n", cachePath)
+		os.Exit(0)
+	}
+
 	versionProvider := runtime.NewVersionProvider(Version)
 	currentVersion := versionProvider.GetVersion()
 
+	// Check if user explicitly wants only prebuild (by checking if they provided other server flags)
+	onlyPrebuild := prebuild && logFile == "" && !daemon
+
 	config := &server.Config{
-		Root:       root,
-		Port:       port,
-		Version:    currentVersion,
-		LogFile:    logFile,
-		Daemon:     daemon,
-		EnableGzip: !disableGzip,
-		GzipLevel:  -1, // Use gzip.DefaultCompression
+		Root:        root,
+		Port:        port,
+		Version:     currentVersion,
+		LogFile:     logFile,
+		Daemon:      daemon,
+		EnableGzip:  !disableGzip,
+		GzipLevel:   -1, // Use gzip.DefaultCompression
+		EnableCache: enableCache,
+		Prebuild:    prebuild,
+		PrebuildParallel: prebuildParallel,
+		OnlyPrebuild: onlyPrebuild,
 	}
 
 	launcher := server.NewLauncher()

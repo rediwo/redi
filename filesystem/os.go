@@ -62,3 +62,8 @@ func (osfs *OSFileSystem) IsReadOnly() bool {
 func (osfs *OSFileSystem) GetRoot() string {
 	return osfs.root
 }
+
+func (osfs *OSFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
+	fullPath := filepath.Join(osfs.root, dirname)
+	return os.ReadDir(fullPath)
+}

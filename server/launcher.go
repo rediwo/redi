@@ -43,6 +43,18 @@ func (l *Launcher) startForeground(config *Config) error {
 		return fmt.Errorf("failed to create server: %v", err)
 	}
 	
+	// Run prebuild if requested
+	if config.Prebuild {
+		log.Printf("Starting pre-build process...")
+		if err := server.PreBuild(config.PrebuildParallel); err != nil {
+			return fmt.Errorf("pre-build failed: %v", err)
+		}
+		// If only prebuild was requested, exit
+		if config.OnlyPrebuild {
+			return nil
+		}
+	}
+	
 	log.Printf("Starting redi server %s on port %d, serving from %s", config.Version, config.Port, config.Root)
 	
 	if err := server.Start(); err != nil {
@@ -130,6 +142,18 @@ func (l *Launcher) startDaemon(config *Config) error {
 	server, err := l.factory.CreateServer(config)
 	if err != nil {
 		return fmt.Errorf("failed to create server: %v", err)
+	}
+	
+	// Run prebuild if requested
+	if config.Prebuild {
+		log.Printf("Starting pre-build process...")
+		if err := server.PreBuild(config.PrebuildParallel); err != nil {
+			return fmt.Errorf("pre-build failed: %v", err)
+		}
+		// If only prebuild was requested, exit
+		if config.OnlyPrebuild {
+			return nil
+		}
 	}
 	
 	log.Printf("Starting redi server %s on port %d, serving from %s", config.Version, config.Port, config.Root)

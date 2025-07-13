@@ -10,13 +10,15 @@ Redi is a Go-based web development toolkit that provides a dynamic web server (`
 - **HTML Template Rendering**: Process `.html` files with Go templates and server-side JavaScript
 - **Markdown Support**: Automatic `.md` to HTML conversion with Goldmark parser
 - **Svelte Support**: Server-side Svelte compilation with automatic runtime injection and enhanced import system
+- **Compilation Cache**: Persistent disk cache for Svelte components with significant performance improvement
+- **Pre-build Support**: Vite-like pre-compilation of all components for production deployments
 - **Template Layouts**: Nested layouts with `{{layout 'name'}}` syntax
 - **Background Mode**: Run server as daemon with `--log` parameter (nohup-like behavior)
 - **Session-based VM Management**: Consistent JavaScript state across requests per client
 - **Static File Serving**: Efficient serving from `public/` directory
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **JavaScript Engine Pooling**: High-performance concurrent request handling
-- **Vimesh Style Integration**: Lightweight CSS generation for Svelte components and HTML templates
+- **Vimesh Style Integration**: Lightweight CSS generation for Svelte components and HTML templates (enabled by default)
 - **Gzip Compression**: Automatic response compression for better performance
 - **Custom Error Pages**: Beautiful error pages with template support (404, 500, etc.)
 
@@ -218,6 +220,21 @@ Run the server:
 # Run in foreground
 redi --root=mysite --port=8080
 
+# Enable compilation cache (enabled by default)
+redi --root=mysite --port=8080 --cache
+
+# Pre-build all Svelte components for production
+redi --root=mysite --prebuild
+
+# Pre-build with custom parallel workers (default: 4)
+redi --root=mysite --prebuild --prebuild-parallel=8
+
+# Pre-build then start server (production deployment)
+redi --root=mysite --prebuild --port=8080
+
+# Clear cache and exit
+redi --root=mysite --clear-cache
+
 # Run in background with logging
 redi --root=mysite --port=8080 --log=server.log
 ```
@@ -323,12 +340,19 @@ redi-build app --help
 #### CLI Options
 - `--root` - Root directory containing public and routes folders (required)
 - `--port` - Port to serve on (default: 8080)
+- `--cache` - Enable compilation cache (default: true)
+- `--prebuild` - Pre-compile all Svelte components before starting server
+- `--prebuild-parallel` - Number of parallel workers for pre-building (default: 4)
+- `--clear-cache` - Clear existing cache and exit
 - `--log` - Log file path (enables background/daemon mode like nohup)
 - `--version` - Show version information
 
 #### Directory Structure
 - `public/` - Static assets (CSS, JS, images)
 - `routes/` - Dynamic routes and API endpoints
+- `.redi/` - Cache directory (auto-generated)
+  - `cache/` - Compiled component cache
+  - `metadata.json` - Cache metadata and statistics
 
 #### Route Types
 - `.html` - HTML templates processed with Go templates
@@ -728,6 +752,36 @@ exports.get = function(req, res, next) {
 };
 ```
 
+### Custom Error Pages
+
+Redi supports custom error pages that integrate with your site's design:
+
+**routes/404.html:**
+```html
+{{layout "base"}}
+
+<div class="min-h-screen flex items-center justify-center">
+    <div class="text-center">
+        <h1 class="text-9xl font-bold text-gray-300">{{.Status}}</h1>
+        <h2 class="text-3xl font-semibold text-gray-800 mb-4">{{.StatusText}}</h2>
+        <p class="text-gray-600 mb-8">{{.Message}}</p>
+        <div class="space-y-2 text-sm text-gray-500">
+            <p>Path: <code class="bg-gray-100 px-2 py-1 rounded">{{.Path}}</code></p>
+            <p>Method: <code class="bg-gray-100 px-2 py-1 rounded">{{.Method}}</code></p>
+        </div>
+        <a href="/" class="mt-8 inline-block bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600">
+            Go Home
+        </a>
+    </div>
+</div>
+```
+
+Error pages can be:
+- **Specific**: `404.html`, `500.html` for specific status codes
+- **Generic**: `4xx.html`, `5xx.html` for error ranges
+- **Styled**: Use layouts and Vimesh Style utility classes
+- **Dynamic**: Access error data in templates
+
 ### Server-Side Rendering with Layouts
 
 **routes/_layout/base.html:**
@@ -817,18 +871,20 @@ Redi provides built-in support for Svelte components with automatic server-side 
 
 ### Svelte Components with Vimesh Style
 
-**Configuration (in your server setup):**
+Vimesh Style is enabled by default for both Svelte components and HTML templates, providing Tailwind-compatible utility classes with minimal overhead.
+
+**Configuration (optional - already enabled by default):**
 ```go
 import "github.com/rediwo/redi/handlers"
 
-// Configure Svelte with Vimesh Style
+// Vimesh Style is enabled by default, but can be configured:
 svelteConfig := &handlers.SvelteConfig{
     MinifyRuntime:    true,
     MinifyComponents: true,
     MinifyCSS:       true,
     UseExternalRuntime: true,
     VimeshStyle: &utils.VimeshStyleConfig{
-        Enable: true,
+        Enable: true,  // Default: true
     },
     VimeshStylePath: "/svelte-vimesh-style.js",
 }
@@ -938,6 +994,53 @@ child_process.exec('git status', function(error, stdout, stderr) {
     console.log('Output:', stdout);
 });
 ```
+
+## ⚡ Performance
+
+### Compilation Cache
+
+Redi includes a sophisticated caching system for optimal Svelte component performance:
+
+#### Cache Features
+- **Persistent Cache**: Components cached to disk in `.redi/cache/` directory
+- **Performance Boost**: Significant improvement in component loading speed after initial compilation
+- **Cache Headers**: `X-Svelte-Cached` header indicates whether component was served from cache
+- **Dependency Tracking**: Automatically invalidates cache when components or dependencies change
+- **Metadata Management**: Tracks access patterns, compilation times, and cache priorities
+
+#### Pre-build Support (Vite-like)
+```bash
+# Pre-compile all Svelte components for production
+redi --root=mysite --prebuild
+
+# Use parallel workers for faster compilation
+redi --root=mysite --prebuild --prebuild-parallel=8
+
+# Production deployment: pre-build then start server
+redi --root=mysite --prebuild --port=8080
+```
+
+#### Cache Management
+```bash
+# Clear all cached components
+redi --root=mysite --clear-cache
+
+# Check cache status via response headers
+curl -I http://localhost:8080/svelte/_lib/DataTable
+# X-Svelte-Cached: true  (served from cache)
+# X-Svelte-Cached: false (freshly compiled)
+```
+
+#### Performance Benefits
+- **Cold Start**: First request compiles component and caches result
+- **Warm Cache**: Subsequent requests served from memory (fastest)
+- **Persistent Cache**: After server restart, components loaded from disk cache
+- **Production Ready**: Pre-build all components during deployment for optimal performance
+
+#### Cache Scenarios
+1. **Development**: Cache automatically manages compilation for fast iteration
+2. **Production**: Pre-build components during deployment for immediate availability
+3. **CI/CD**: Clear cache and pre-build as part of deployment pipeline
 
 ## 🧪 Testing
 

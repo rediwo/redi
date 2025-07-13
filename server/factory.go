@@ -26,6 +26,7 @@ func (f *Factory) CreateServer(config *Config) (*redi.Server, error) {
 	if config.RoutesDir != "" {
 		server.SetRoutesDir(config.RoutesDir)
 	}
+	server.SetCacheEnabled(config.EnableCache)
 	
 	return server, nil
 }
@@ -42,6 +43,7 @@ func (f *Factory) CreateEmbeddedServer(config *EmbedConfig) (*redi.Server, error
 	if config.RoutesDir != "" {
 		server.SetRoutesDir(config.RoutesDir)
 	}
+	server.SetCacheEnabled(config.EnableCache)
 	
 	return server, nil
 }

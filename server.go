@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/rediwo/redi/cache"
 	"github.com/rediwo/redi/filesystem"
 	rediHandlers "github.com/rediwo/redi/handlers"
 )
@@ -26,6 +27,9 @@ type Server struct {
 	enableGzip     bool
 	gzipLevel      int
 	routesDir      string
+	cacheManager   *cache.CacheManager
+	svelteCache    *cache.SvelteCache
+	enableCache    bool
 }
 
 func NewServer(root string, port int) *Server {
@@ -38,25 +42,27 @@ func NewServerWithFS(embedFS fs.FS, port int) *Server {
 
 func NewServerWithVersion(root string, port int, version string) *Server {
 	return &Server{
-		port:       port,
-		router:     mux.NewRouter(),
-		fs:         filesystem.NewOSFileSystem(root),
-		version:    version,
-		enableGzip: true,
-		gzipLevel:  gzip.DefaultCompression,
-		routesDir:  "routes",
+		port:        port,
+		router:      mux.NewRouter(),
+		fs:          filesystem.NewOSFileSystem(root),
+		version:     version,
+		enableGzip:  true,
+		gzipLevel:   gzip.DefaultCompression,
+		routesDir:   "routes",
+		enableCache: true,
 	}
 }
 
 func NewServerWithFSAndVersion(embedFS fs.FS, port int, version string) *Server {
 	return &Server{
-		port:       port,
-		router:     mux.NewRouter(),
-		fs:         filesystem.NewEmbedFileSystem(embedFS),
-		version:    version,
-		enableGzip: true,
-		gzipLevel:  gzip.DefaultCompression,
-		routesDir:  "routes",
+		port:        port,
+		router:      mux.NewRouter(),
+		fs:          filesystem.NewEmbedFileSystem(embedFS),
+		version:     version,
+		enableGzip:  true,
+		gzipLevel:   gzip.DefaultCompression,
+		routesDir:   "routes",
+		enableCache: true,
 	}
 }
 
@@ -75,6 +81,48 @@ func (s *Server) SetGzipLevel(level int) {
 // SetRoutesDir sets the directory for routes
 func (s *Server) SetRoutesDir(dir string) {
 	s.routesDir = dir
+}
+
+// SetCacheEnabled configures whether compilation caching is enabled
+func (s *Server) SetCacheEnabled(enabled bool) {
+	s.enableCache = enabled
+}
+
+// initializeCache initializes the cache system if enabled
+func (s *Server) initializeCache() error {
+	if !s.enableCache {
+		log.Printf("Cache is disabled")
+		return nil
+	}
+
+	log.Printf("Initializing cache system...")
+	
+	// Get the root directory from the filesystem
+	rootDir := s.fs.GetRoot()
+	log.Printf("Root directory: %s", rootDir)
+
+	// Create cache configuration
+	cacheConfig := &cache.CacheConfig{
+		RootDir:       rootDir,
+		Enabled:       true,
+		MaxSize:       500 * 1024 * 1024, // 500MB default
+		TTL:           0,                  // No expiration by default
+		CompressCache: false,
+	}
+
+	// Initialize cache manager
+	s.cacheManager = cache.NewCacheManager(cacheConfig)
+	s.cacheManager.SetFileSystem(s.fs)
+
+	if err := s.cacheManager.Initialize(); err != nil {
+		return fmt.Errorf("failed to initialize cache: %w", err)
+	}
+
+	// Create Svelte cache
+	s.svelteCache = cache.NewSvelteCache(s.cacheManager, s.fs)
+
+	log.Printf("Cache system initialized at: %s/.redi", rootDir)
+	return nil
 }
 
 func (s *Server) Start() error {
@@ -106,8 +154,19 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) setupRoutes() error {
+	// Initialize cache if enabled
+	if err := s.initializeCache(); err != nil {
+		log.Printf("Warning: Failed to initialize cache: %v", err)
+		// Continue without cache
+	}
+
 	routeScanner := NewRouteScanner(s.fs, s.routesDir)
 	s.handlerManager = NewHandlerManagerWithServer(s.fs, s.version, s.router, s.routesDir)
+
+	// Set persistent cache on Svelte handler if available
+	if s.svelteCache != nil && s.handlerManager.svelteHandler != nil {
+		s.handlerManager.svelteHandler.SetPersistentCache(s.svelteCache)
+	}
 
 	// Set custom 404 handler using the error handler
 	s.router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,5 +255,35 @@ func (s *Server) Stop() error {
 	defer cancel()
 	
 	return s.httpServer.Shutdown(ctx)
+}
+
+// PreBuild pre-compiles all Svelte components
+func (s *Server) PreBuild(parallelWorkers int) error {
+	// Ensure cache is enabled
+	if !s.enableCache {
+		return fmt.Errorf("cache must be enabled for pre-building (use --cache flag)")
+	}
+	
+	// Initialize cache if not already done
+	if s.cacheManager == nil {
+		if err := s.initializeCache(); err != nil {
+			return fmt.Errorf("failed to initialize cache: %w", err)
+		}
+	}
+	
+	// Setup handlers to get the SvelteHandler
+	if err := s.setupRoutes(); err != nil {
+		return fmt.Errorf("failed to setup routes: %w", err)
+	}
+	
+	// Get the SvelteHandler from the handler manager
+	svelteHandler := s.handlerManager.GetSvelteHandler()
+	if svelteHandler == nil {
+		return fmt.Errorf("Svelte handler not initialized")
+	}
+	
+	// Create and run the pre-builder
+	preBuilder := NewServerPreBuilder(s.fs, svelteHandler, s.routesDir, parallelWorkers)
+	return preBuilder.Build()
 }
 

@@ -14,4 +14,6 @@ type FileSystem interface {
 	IsReadOnly() bool
 	// GetRoot returns the root directory path for this filesystem
 	GetRoot() string
+	// ReadDir reads the directory named by dirname
+	ReadDir(dirname string) ([]fs.DirEntry, error)
 }

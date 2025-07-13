@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -136,6 +137,66 @@ func (mfs *MemoryFileSystem) IsReadOnly() bool {
 func (mfs *MemoryFileSystem) GetRoot() string {
 	// Memory filesystem has no physical root
 	return "."
+}
+
+func (mfs *MemoryFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
+	mfs.mu.RLock()
+	defer mfs.mu.RUnlock()
+
+	// Get all entries in the directory
+	entries := make(map[string]fs.DirEntry)
+	dirPrefix := dirname
+	if dirPrefix != "" && !strings.HasSuffix(dirPrefix, "/") {
+		dirPrefix += "/"
+	}
+
+	for path, fileData := range mfs.files {
+		// Skip if not in the target directory
+		if dirname != "" && !strings.HasPrefix(path, dirPrefix) {
+			continue
+		}
+
+		// Get the relative path from the directory
+		relPath := path
+		if dirname != "" {
+			relPath = strings.TrimPrefix(path, dirPrefix)
+		}
+
+		// Skip if it's in a subdirectory
+		if strings.Contains(relPath, "/") {
+			// This is in a subdirectory, add the subdirectory itself
+			subdirName := strings.Split(relPath, "/")[0]
+			if _, exists := entries[subdirName]; !exists {
+				// Create a directory entry
+				entries[subdirName] = &memoryDirEntry{
+					info: &MemoryFileInfo{
+						name: subdirName,
+						size: 0,
+						time: time.Now(),
+						mode: fs.ModeDir | 0755,
+					},
+				}
+			}
+		} else if relPath != "" {
+			// This is a file in the directory
+			entries[relPath] = &memoryDirEntry{
+				info: &MemoryFileInfo{
+					name: filepath.Base(relPath),
+					size: int64(len(fileData.content)),
+					time: fileData.modTime,
+					mode: 0644,
+				},
+			}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]fs.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, entry)
+	}
+
+	return result, nil
 }
 
 // hasPathPrefix checks if path has the given prefix (replaces deprecated filepath.HasPrefix)

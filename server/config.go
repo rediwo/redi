@@ -17,16 +17,27 @@ type Config struct {
 	// Gzip compression settings
 	EnableGzip bool // Enable gzip compression (default: true)
 	GzipLevel  int  // Compression level (-1 to 9, -1 = default)
+	
+	// Cache settings
+	EnableCache bool // Enable compilation cache (default: false)
+	
+	// Prebuild settings
+	Prebuild         bool // Pre-compile all Svelte components before starting
+	PrebuildParallel int  // Number of parallel workers for pre-building
+	OnlyPrebuild     bool // Only run prebuild without starting server
 }
 
 // NewConfig creates a new server configuration
 func NewConfig() *Config {
 	return &Config{
-		Port:       8080,
-		Version:    "dev",
-		RoutesDir:  "routes",
-		EnableGzip: true,
-		GzipLevel:  -1, // Use gzip.DefaultCompression
+		Port:             8080,
+		Version:          "dev",
+		RoutesDir:        "routes",
+		EnableGzip:       true,
+		GzipLevel:        -1, // Use gzip.DefaultCompression
+		EnableCache:      false,
+		Prebuild:         false,
+		PrebuildParallel: 4,
 	}
 }
 
@@ -61,17 +72,21 @@ type EmbedConfig struct {
 	// Gzip compression settings
 	EnableGzip bool // Enable gzip compression (default: true)
 	GzipLevel  int  // Compression level (-1 to 9, -1 = default)
+	
+	// Cache settings
+	EnableCache bool // Enable compilation cache (default: false)
 }
 
 // NewEmbedConfig creates a new embedded server configuration
 func NewEmbedConfig(embedFS fs.FS) *EmbedConfig {
 	return &EmbedConfig{
-		EmbedFS:    embedFS,
-		Port:       8080,
-		Version:    "dev",
-		RoutesDir:  "routes",
-		EnableGzip: true,
-		GzipLevel:  -1, // Use gzip.DefaultCompression
+		EmbedFS:     embedFS,
+		Port:        8080,
+		Version:     "dev",
+		RoutesDir:   "routes",
+		EnableGzip:  true,
+		GzipLevel:   -1, // Use gzip.DefaultCompression
+		EnableCache: false,
 	}
 }
 

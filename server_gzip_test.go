@@ -44,6 +44,8 @@ func TestServerGzipCompression(t *testing.T) {
 		enableGzip:     true,
 		gzipLevel:      gzip.DefaultCompression,
 		handlerManager: NewHandlerManager(fs),
+		routesDir:      "routes",
+		enableCache:    false,
 	}
 	
 	// Setup routes (includes static server)
@@ -149,11 +151,13 @@ func TestServerGzipDisabled(t *testing.T) {
 	
 	// Create server with gzip disabled
 	server := &Server{
-		port:       8080,
-		router:     mux.NewRouter(),
-		fs:         fs,
-		version:    "test",
-		enableGzip: false,
+		port:        8080,
+		router:      mux.NewRouter(),
+		fs:          fs,
+		version:     "test",
+		enableGzip:  false,
+		routesDir:   "routes",
+		enableCache: false,
 	}
 	
 	// Setup routes

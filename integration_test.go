@@ -183,6 +183,8 @@ func TestServerIntegration(t *testing.T) {
 		port:           8080,
 		fs:             memFS,
 		handlerManager: NewHandlerManager(memFS),
+		routesDir:      "routes",
+		enableCache:    false,
 	}
 	
 	// Setup routes (includes static server)
@@ -320,6 +322,8 @@ func TestAPIEndpointsIntegration(t *testing.T) {
 		port:           8080,
 		fs:             memFS,
 		handlerManager: NewHandlerManager(memFS),
+		routesDir:      "routes",
+		enableCache:    false,
 	}
 	
 	if err := server.setupRoutes(); err != nil {
@@ -476,9 +480,11 @@ func TestDynamicRoutingIntegration(t *testing.T) {
 	memFS := setupIntegrationMemoryFS()
 	
 	server := &Server{
-		router: mux.NewRouter(),
-		port:   8080,
-		fs:     memFS,
+		router:      mux.NewRouter(),
+		port:        8080,
+		fs:          memFS,
+		routesDir:   "routes",
+		enableCache: false,
 	}
 	
 	if err := server.setupRoutes(); err != nil {
