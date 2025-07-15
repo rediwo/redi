@@ -3,6 +3,8 @@ package server
 import (
 	"io/fs"
 	"os"
+	
+	"github.com/rediwo/redi/logging"
 )
 
 // Config represents server configuration
@@ -25,6 +27,11 @@ type Config struct {
 	Prebuild         bool // Pre-compile all Svelte components before starting
 	PrebuildParallel int  // Number of parallel workers for pre-building
 	OnlyPrebuild     bool // Only run prebuild without starting server
+	
+	// Logging settings
+	LogLevel    string // Log level (debug, info, warn, error)
+	LogFormat   string // Log format (text, json)
+	LogQuiet    bool   // Quiet mode (only ERROR and FATAL)
 }
 
 // NewConfig creates a new server configuration
@@ -38,6 +45,9 @@ func NewConfig() *Config {
 		EnableCache:      false,
 		Prebuild:         false,
 		PrebuildParallel: 4,
+		LogLevel:         "info",
+		LogFormat:        "text",
+		LogQuiet:         false,
 	}
 }
 
@@ -60,6 +70,22 @@ func (c *Config) Validate() error {
 	}
 	
 	return nil
+}
+
+// CreateLoggingConfig creates a logging configuration from server config
+func (c *Config) CreateLoggingConfig() *logging.Config {
+	logConfig := logging.DefaultConfig()
+	logConfig.Level = logging.ParseLevel(c.LogLevel)
+	logConfig.Format = logging.ParseFormat(c.LogFormat)
+	logConfig.Quiet = c.LogQuiet
+	
+	// Set log file if specified
+	if c.LogFile != "" {
+		logConfig.File = c.LogFile
+		logConfig.EnableColors = false // Disable colors for file output
+	}
+	
+	return logConfig
 }
 
 // EmbedConfig represents embedded server configuration

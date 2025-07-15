@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rediwo/redi/cache"
 	"github.com/rediwo/redi/filesystem"
+	"github.com/rediwo/redi/logging"
 	rediHandlers "github.com/rediwo/redi/handlers"
 )
 
@@ -91,15 +92,15 @@ func (s *Server) SetCacheEnabled(enabled bool) {
 // initializeCache initializes the cache system if enabled
 func (s *Server) initializeCache() error {
 	if !s.enableCache {
-		log.Printf("Cache is disabled")
+		logging.Info("Cache is disabled")
 		return nil
 	}
 
-	log.Printf("Initializing cache system...")
+	logging.Info("Initializing cache system")
 	
 	// Get the root directory from the filesystem
 	rootDir := s.fs.GetRoot()
-	log.Printf("Root directory: %s", rootDir)
+	logging.Debug("Cache root directory", "path", rootDir)
 
 	// Create cache configuration
 	cacheConfig := &cache.CacheConfig{
@@ -121,7 +122,7 @@ func (s *Server) initializeCache() error {
 	// Create Svelte cache
 	s.svelteCache = cache.NewSvelteCache(s.cacheManager, s.fs)
 
-	log.Printf("Cache system initialized at: %s/.redi", rootDir)
+	logging.Info("Cache system initialized", "location", rootDir+"/.redi")
 	return nil
 }
 
@@ -140,7 +141,7 @@ func (s *Server) Start() error {
 		} else {
 			handler = handlers.CompressHandlerLevel(handler, s.gzipLevel)
 		}
-		log.Printf("Gzip compression enabled (level: %d)", s.gzipLevel)
+		logging.Info("Gzip compression enabled", "level", s.gzipLevel)
 	}
 
 	addr := fmt.Sprintf(":%d", s.port)
@@ -149,14 +150,14 @@ func (s *Server) Start() error {
 		Handler: handler,
 	}
 	
-	log.Printf("Server listening on %s", addr)
+	logging.Info("Server listening", "address", addr)
 	return s.httpServer.ListenAndServe()
 }
 
 func (s *Server) setupRoutes() error {
 	// Initialize cache if enabled
 	if err := s.initializeCache(); err != nil {
-		log.Printf("Warning: Failed to initialize cache: %v", err)
+		logging.Warn("Failed to initialize cache", "error", err)
 		// Continue without cache
 	}
 
@@ -181,12 +182,12 @@ func (s *Server) setupRoutes() error {
 	for _, route := range routes {
 		handler := s.handlerManager.GetHandler(route)
 		s.router.HandleFunc(route.Path, handler).Methods("GET", "POST", "PUT", "DELETE", "HEAD")
-		log.Printf("Registered route: %s -> %s", route.Path, route.FilePath)
+		logging.Debug("Registered route", "path", route.Path, "file", route.FilePath, "type", route.FileType)
 		
 		// Only register with trailing slash for index files (but not the root "/")
 		if route.IsIndex && route.Path != "/" && route.Path != "" {
 			s.router.HandleFunc(route.Path+"/", handler).Methods("GET", "POST", "PUT", "DELETE", "HEAD")
-			log.Printf("Registered route (with trailing slash): %s/ -> %s", route.Path, route.FilePath)
+			logging.Debug("Registered route with trailing slash", "path", route.Path+"/", "file", route.FilePath)
 		}
 	}
 
@@ -242,7 +243,7 @@ func (s *Server) setupStaticFileServer() {
 	})
 	
 	s.router.PathPrefix("/").Handler(staticHandler)
-	log.Printf("Static file server serving from public directory")
+	logging.Debug("Static file server enabled", "directory", "public")
 }
 
 // Stop gracefully shuts down the server

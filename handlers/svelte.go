@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rediwo/redi/cache"
 	"github.com/rediwo/redi/filesystem"
+	"github.com/rediwo/redi/logging"
 	"github.com/rediwo/redi/utils"
 	"github.com/tdewolff/minify/v2"
 	"github.com/tdewolff/minify/v2/css"
@@ -287,19 +288,19 @@ func (sh *SvelteHandler) compileWithCache(filePath string, source string) (*cach
 func (sh *SvelteHandler) RegisterRoutes(router *mux.Router) {
 	if sh.config.UseExternalRuntime {
 		router.HandleFunc(sh.config.RuntimePath, sh.ServeSvelteRuntime).Methods("GET", "HEAD")
-		log.Printf("Registered Svelte runtime route: %s", sh.config.RuntimePath)
+		logging.Debug("Registered Svelte runtime route", "path", sh.config.RuntimePath)
 	}
 
 	// Register Vimesh Style route if enabled
 	if sh.config.VimeshStyle != nil && sh.config.VimeshStyle.Enable {
 		router.HandleFunc(sh.config.VimeshStylePath, sh.ServeVimeshStyle).Methods("GET", "HEAD")
-		log.Printf("Registered Svelte Vimesh Style route: %s", sh.config.VimeshStylePath)
+		logging.Debug("Registered Svelte Vimesh Style route", "path", sh.config.VimeshStylePath)
 	}
 
 	// Register async library if enabled
 	if sh.config.EnableAsyncLoading {
 		router.HandleFunc(sh.config.AsyncLibraryPath, sh.ServeAsyncLibrary).Methods("GET", "HEAD")
-		log.Printf("Registered Svelte async library route: %s", sh.config.AsyncLibraryPath)
+		logging.Debug("Registered Svelte async library route", "path", sh.config.AsyncLibraryPath)
 	}
 }
 

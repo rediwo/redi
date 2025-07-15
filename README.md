@@ -345,6 +345,9 @@ redi-build app --help
 - `--prebuild-parallel` - Number of parallel workers for pre-building (default: 4)
 - `--clear-cache` - Clear existing cache and exit
 - `--log` - Log file path (enables background/daemon mode like nohup)
+- `--log-level` - Log level: debug, info, warn, error (default: info)
+- `--log-format` - Log format: text, json (default: text)
+- `--quiet` - Quiet mode (only ERROR and FATAL messages)
 - `--version` - Show version information
 
 #### Directory Structure
@@ -993,6 +996,48 @@ child_process.exec('git status', function(error, stdout, stderr) {
     }
     console.log('Output:', stdout);
 });
+```
+
+## 📝 Logging System
+
+Redi includes a comprehensive logging system with multiple levels and formats:
+
+### Log Levels
+- **DEBUG**: Detailed diagnostic information (route registration, cache operations)
+- **INFO**: General informational messages (server startup, compilation progress)
+- **WARN**: Warning messages (cache failures, deprecated features)
+- **ERROR**: Error messages (compilation failures, file not found)
+- **FATAL**: Fatal errors that cause program termination
+
+### Log Formats
+- **Text**: Human-readable colored output for development
+- **JSON**: Structured logging for production and log analysis
+
+### Usage Examples
+```bash
+# Different log levels
+redi --root=mysite --log-level=debug    # Show all messages
+redi --root=mysite --log-level=info     # Default level
+redi --root=mysite --log-level=warn     # Only warnings and errors
+redi --root=mysite --log-level=error    # Only errors
+
+# Different formats
+redi --root=mysite --log-format=text    # Colored text (default)
+redi --root=mysite --log-format=json    # JSON format
+
+# Quiet mode (only errors and fatal)
+redi --root=mysite --quiet
+
+# Combine with file logging
+redi --root=mysite --log=server.log --log-format=json --log-level=info
+```
+
+### Structured Logging
+The logging system supports structured fields for better analysis:
+```json
+{"level":"INFO","message":"Server starting","port":8080,"root":"mysite","timestamp":"2025-07-14T16:40:00+08:00","version":"1.0.0"}
+{"level":"DEBUG","message":"Registered route","file":"routes/index.html","path":"/","type":"html","timestamp":"2025-07-14T16:40:01+08:00"}
+{"level":"INFO","message":"Pre-build completed","compiled":15,"duration":"2.5s","errors":0,"timestamp":"2025-07-14T16:40:03+08:00"}
 ```
 
 ## ⚡ Performance

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rediwo/redi"
+	"github.com/rediwo/redi/logging"
 )
 
 // Launcher handles server startup modes
@@ -25,6 +26,11 @@ func NewLauncher() *Launcher {
 
 // Start starts the server based on configuration
 func (l *Launcher) Start(config *Config) error {
+	// Initialize logging system
+	if err := l.initializeLogging(config); err != nil {
+		return fmt.Errorf("failed to initialize logging: %v", err)
+	}
+	
 	if config.Daemon {
 		return l.startDaemon(config)
 	}
@@ -36,6 +42,18 @@ func (l *Launcher) Start(config *Config) error {
 	return l.startForeground(config)
 }
 
+// initializeLogging initializes the global logging system
+func (l *Launcher) initializeLogging(config *Config) error {
+	logConfig := config.CreateLoggingConfig()
+	logger, err := logging.New(logConfig)
+	if err != nil {
+		return err
+	}
+	
+	logging.SetGlobalLogger(logger)
+	return nil
+}
+
 // startForeground starts the server in foreground mode
 func (l *Launcher) startForeground(config *Config) error {
 	server, err := l.factory.CreateServer(config)
@@ -45,7 +63,7 @@ func (l *Launcher) startForeground(config *Config) error {
 	
 	// Run prebuild if requested
 	if config.Prebuild {
-		log.Printf("Starting pre-build process...")
+		logging.Info("Starting pre-build process")
 		if err := server.PreBuild(config.PrebuildParallel); err != nil {
 			return fmt.Errorf("pre-build failed: %v", err)
 		}
@@ -55,7 +73,7 @@ func (l *Launcher) startForeground(config *Config) error {
 		}
 	}
 	
-	log.Printf("Starting redi server %s on port %d, serving from %s", config.Version, config.Port, config.Root)
+	logging.Info("Starting redi server", "version", config.Version, "port", config.Port, "root", config.Root)
 	
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("server failed to start: %v", err)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/rediwo/redi/filesystem"
 	"github.com/rediwo/redi/handlers"
+	"github.com/rediwo/redi/logging"
 )
 
 // PreBuilder handles pre-compilation of Svelte components
@@ -46,7 +47,7 @@ func (pb *PreBuilder) Build() error {
 	pb.startTime = time.Now()
 	
 	// Get all Svelte files from the handler
-	fmt.Println("🔍 Scanning for Svelte components...")
+	logging.Info("Scanning for Svelte components")
 	components, err := pb.svelteHandler.GetAllSvelteFiles()
 	if err != nil {
 		return fmt.Errorf("failed to scan components: %w", err)
@@ -55,14 +56,12 @@ func (pb *PreBuilder) Build() error {
 	pb.components = components
 	
 	if len(pb.components) == 0 {
-		fmt.Println("✅ No Svelte components found to pre-build")
+		logging.Info("No Svelte components found to pre-build")
 		return nil
 	}
 	
 	pb.totalComponents = int32(len(pb.components))
-	fmt.Printf("📦 Found %d Svelte components to pre-build\n", pb.totalComponents)
-	fmt.Printf("🚀 Using %d parallel workers\n", pb.parallelWorkers)
-	fmt.Println("")
+	logging.Info("Starting pre-build", "components", pb.totalComponents, "workers", pb.parallelWorkers)
 	
 	// Create worker pool
 	jobs := make(chan string, len(pb.components))
@@ -88,18 +87,22 @@ func (pb *PreBuilder) Build() error {
 	compiled := atomic.LoadInt32(&pb.compiledCount)
 	errors := atomic.LoadInt32(&pb.errorCount)
 	
-	fmt.Printf("\n✨ Pre-build completed in %s\n", elapsed.Round(time.Millisecond))
-	fmt.Printf("   ✅ Successfully compiled: %d components\n", compiled)
-	if errors > 0 {
-		fmt.Printf("   ❌ Failed to compile: %d components\n", errors)
-		pb.printErrors()
-	}
 	if compiled > 0 {
 		avgTime := elapsed / time.Duration(compiled)
-		fmt.Printf("   ⚡ Average time per component: %s\n", avgTime.Round(time.Millisecond))
+		logging.Info("Pre-build completed", 
+			"duration", elapsed.Round(time.Millisecond).String(),
+			"compiled", compiled,
+			"errors", errors,
+			"avgTime", avgTime.Round(time.Millisecond).String())
+	} else {
+		logging.Info("Pre-build completed", 
+			"duration", elapsed.Round(time.Millisecond).String(),
+			"compiled", compiled,
+			"errors", errors)
 	}
 	
 	if errors > 0 {
+		pb.printErrors()
 		return fmt.Errorf("pre-build completed with %d errors", errors)
 	}
 	
@@ -117,7 +120,18 @@ func (pb *PreBuilder) worker(id int, jobs <-chan string, wg *sync.WaitGroup) {
 		// Update progress
 		current := atomic.AddInt32(&pb.compiledCount, 1)
 		progress := float64(current) / float64(pb.totalComponents) * 100
-		fmt.Printf("[%d/%d] %.1f%% Compiling: %s...\n", current, pb.totalComponents, progress, relativePath)
+		
+		if logging.IsDebugEnabled() {
+			logging.Debug("Compiling component", 
+				"worker", id,
+				"progress", fmt.Sprintf("%.1f%%", progress),
+				"current", current,
+				"total", pb.totalComponents,
+				"file", relativePath)
+		} else {
+			// For non-debug levels, show a simple progress indicator
+			logging.Info("Compiling", "progress", fmt.Sprintf("%d/%d", current, pb.totalComponents), "file", relativePath)
+		}
 		
 		// Compile the component
 		if err := pb.compileComponent(component); err != nil {
@@ -126,9 +140,14 @@ func (pb *PreBuilder) worker(id int, jobs <-chan string, wg *sync.WaitGroup) {
 			pb.mu.Lock()
 			pb.errors = append(pb.errors, fmt.Errorf("%s: %w", relativePath, err))
 			pb.mu.Unlock()
-			fmt.Printf("   ❌ Failed: %s (%.2fs) - %v\n", relativePath, time.Since(start).Seconds(), err)
+			logging.Error("Compilation failed", 
+				"file", relativePath, 
+				"duration", fmt.Sprintf("%.2fs", time.Since(start).Seconds()), 
+				"error", err)
 		} else {
-			fmt.Printf("   ✅ Compiled: %s (%.2fs)\n", relativePath, time.Since(start).Seconds())
+			logging.Debug("Compilation successful", 
+				"file", relativePath, 
+				"duration", fmt.Sprintf("%.2fs", time.Since(start).Seconds()))
 		}
 	}
 }
@@ -152,9 +171,9 @@ func (pb *PreBuilder) compileComponent(path string) error {
 
 // printErrors prints all compilation errors
 func (pb *PreBuilder) printErrors() {
-	fmt.Println("\n❌ Compilation errors:")
+	logging.Error("Compilation errors summary", "errorCount", len(pb.errors))
 	for _, err := range pb.errors {
-		fmt.Printf("   • %v\n", err)
+		logging.Error("Compilation error", "error", err)
 	}
 }
 
